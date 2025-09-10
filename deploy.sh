@@ -128,8 +128,7 @@ update_users() {
   if [[ "${flag_dry}" ]]; then
       return
   fi
-  echo "update env"
-#  sed -i '' "/^ALLOWED_TELEGRAM_USER_IDS=/s/=.*/=${ids}/" .env; source_env
+  sed -i '' "/^ALLOWED_TELEGRAM_USER_IDS=/s/=.*/=${ids}/" .env; source_env
 }
 
 set_envs() {
@@ -184,7 +183,7 @@ docker_build() {
 
 docker_copy_logs() {
   local_log_file="${name}_docker.log"
-  remote_log_file=$(docker --context ${context} inspect --format='{{.LogPath}}' ${name})
+  remote_log_file=$(docker --context ${context} inspect --format='{{.LogPath}}' ${old_name})
   echo -e "## INFO: ${name} docker logs appended to ${local_log_file}"
   rsync -avzh --progress --rsync-path="sudo rsync" ${context}:${remote_log_file} tmp.log
   jq -r .log < tmp.log | sed '/^\s*$/d' >> ${local_log_file}

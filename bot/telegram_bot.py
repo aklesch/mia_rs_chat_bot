@@ -1040,6 +1040,15 @@ class ChatGPTTelegramBot:
         """
         Post initialization hook for the bot.
         """
+        bot_user = await application.bot.get_me()
+
+        logging.info(f'Initializing @{bot_user.username}...')
+
+        user_budgets = self.config['user_budgets'].split(',')
+        if len(user_budgets) == 1:
+            logging.warning(f"Only one value for budgets is set, this value ({user_budgets}) will be used as "
+                            f"{self.config['budget_period']} budget for every regular bot user")
+
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
 
