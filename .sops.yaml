@@ -1,0 +1,21 @@
+creation_rules:
+  # upon creation of a file that matches the pattern *.dev.env,
+  - path_regex: \.env$
+    age: >-
+      age1ludhmkcyfmjpslfme8yttu2mc929xpe6npcuvxk3k97xac3xq9usff3jrx
+    pgp: >-
+      441D47F07B944042AAB8660AA1F0EC831B0E755C
+  - path_regex: \.yaml$
+    age: >-
+      age1ludhmkcyfmjpslfme8yttu2mc929xpe6npcuvxk3k97xac3xq9usff3jrx
+    pgp: >-
+      441D47F07B944042AAB8660AA1F0EC831B0E755C
+  - path_regex: \.yml$
+    age: >-
+      age1ludhmkcyfmjpslfme8yttu2mc929xpe6npcuvxk3k97xac3xq9usff3jrx
+    pgp: >-
+      441D47F07B944042AAB8660AA1F0EC831B0E755C
+  - age: >-
+      age1ludhmkcyfmjpslfme8yttu2mc929xpe6npcuvxk3k97xac3xq9usff3jrx
+  - pgp: >-
+      441D47F07B944042AAB8660AA1F0EC831B0E755C

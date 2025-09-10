@@ -1,0 +1,8 @@
+*.yaml diff=sopsdiffer
+*.env diff=sopsdiffer
+*.json diff=sopsdiffer
+
+*.env filter=sops_dotenv
+
+example.env filter=auto
+example.env diff=auto
