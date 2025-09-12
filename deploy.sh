@@ -138,12 +138,7 @@ set_envs() {
   context='cit-droplet'
   name=${PWD##*/}
 
-  old_name='sputnik_bot'
-  if [[ -z "${old_name}" ]]; then
-    old_name=$name
-  fi
-
-  IMAGE_ID=$(docker --context=${context} images ${old_name}:latest --format "{{.ID}}")
+  IMAGE_ID=$(docker --context=${context} images ${name}:latest --format "{{.ID}}")
   if [ -z "${IMAGE_ID}" ]; then
     cur_tag=0.0.0
   else
@@ -183,7 +178,7 @@ docker_build() {
 
 docker_copy_logs() {
   local_log_file="${name}_docker.log"
-  remote_log_file=$(docker --context ${context} inspect --format='{{.LogPath}}' ${old_name})
+  remote_log_file=$(docker --context ${context} inspect --format='{{.LogPath}}' ${name})
   echo -e "## INFO: ${name} docker logs appended to ${local_log_file}"
   rsync -avzh --progress --rsync-path="sudo rsync" ${context}:${remote_log_file} tmp.log
   jq -r .log < tmp.log | sed '/^\s*$/d' >> ${local_log_file}
@@ -199,7 +194,9 @@ docker_run() {
   if [[ ! "${flag_logs}" ]]; then
     echo -e "## INFO: removing old container"
     docker_copy_logs
-    docker --context ${context} rm -f ${old_name}
+    docker --context ${context} rm -f ${name}
+#    docker --context ${context} stop ${name}
+#    docker update --restart=no ${name}
     echo -e "## INFO: starting new container"
     docker --context ${context} run -d -v /home/aamite/${name}_usage_logs:/app/usage_logs -v /home/aamite/${name}_data:/app/data --env-file ${env_file} --restart=always --name=${name} ${name}
     echo -e "## INFO: docker processes status"
