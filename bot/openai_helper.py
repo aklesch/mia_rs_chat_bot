@@ -1,21 +1,19 @@
 from __future__ import annotations
+
 import datetime
-import logging
-import os
-
-import tiktoken
-
-import openai
-
-import json
 import httpx
 import io
+import json
+import logging
+import openai
+import os
+import tiktoken
+
+from i18n import localized_text
 from PIL import Image
-
-from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
-
-from utils import is_direct_result, encode_image, decode_image
 from plugin_manager import PluginManager
+from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
+from utils import is_direct_result, encode_image, decode_image
 
 # Models can be found here: https://platform.openai.com/docs/models/overview
 # Models gpt-3.5-turbo-0613 and  gpt-3.5-turbo-16k-0613 will be deprecated on June 13, 2024
@@ -65,31 +63,6 @@ def are_functions_available(model: str) -> bool:
     if model in O_MODELS:
         return False
     return True
-
-
-# Load translations
-parent_dir_path = os.path.join(os.path.dirname(__file__), os.pardir)
-translations_file_path = os.path.join(parent_dir_path, 'translations.json')
-with open(translations_file_path, 'r', encoding='utf-8') as f:
-    translations = json.load(f)
-
-
-def localized_text(key, bot_language):
-    """
-    Return translated text for a key in specified bot_language.
-    Keys and translations can be found in the translations.json.
-    """
-    try:
-        return translations[bot_language][key]
-    except KeyError:
-        logging.warning(f"No translation available for bot_language code '{bot_language}' and key '{key}'")
-        # Fallback to English if the translation is not available
-        if key in translations['en']:
-            return translations['en'][key]
-        else:
-            logging.warning(f"No english definition found for key '{key}' in translations.json")
-            # return key as text
-            return key
 
 
 class OpenAIHelper:

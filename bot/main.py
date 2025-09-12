@@ -2,9 +2,9 @@ import logging
 import os
 
 from dotenv import load_dotenv
-
-from plugin_manager import PluginManager
+from helpers import create_user_ids_set
 from openai_helper import OpenAIHelper, default_max_tokens, are_functions_available
+from plugin_manager import PluginManager
 from telegram_bot import ChatGPTTelegramBot
 
 
@@ -75,8 +75,12 @@ def main():
 
     telegram_config = {
         'token': os.environ['TELEGRAM_BOT_TOKEN'],
-        'admin_user_ids': os.environ.get('ADMIN_USER_IDS', '-'),
-        'allowed_user_ids': os.environ.get('ALLOWED_TELEGRAM_USER_IDS', '*'),
+        'admin_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_ADMIN_USER_IDS')),
+        'moder_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_MODER_USER_IDS')),
+        'user_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_ALLOWED_USER_IDS')),
+        'telegram_channel_id': os.environ.get('TELEGRAM_CHANNEL_ID'),
+        # 'admin_user_ids': os.environ.get('ADMIN_USER_IDS', '-'),
+        # 'allowed_user_ids': os.environ.get('ALLOWED_TELEGRAM_USER_IDS', '*'),
         'enable_quoting': os.environ.get('ENABLE_QUOTING', 'true').lower() == 'true',
         'enable_image_generation': os.environ.get('ENABLE_IMAGE_GENERATION', 'true').lower() == 'true',
         'enable_transcription': os.environ.get('ENABLE_TRANSCRIPTION', 'true').lower() == 'true',

@@ -1,7 +1,6 @@
 import logging
 
 import functools
-from translations import lt
 from usage_tracker import UsageTracker
 from utils import (
     get_thread_id,
@@ -24,6 +23,7 @@ def admin_restricted(func):
         return await func(self, update, context, *args, **kwargs)
 
     return wrapped
+
 
 def moder_restricted(func):
     """
@@ -87,9 +87,7 @@ def budget(func):
     @functools.wraps(func)
     async def wrapped(self, update, context, is_inline=False, *args, **kwargs):
         user = update.inline_query.from_user if is_inline else update.effective_user
-        lang = self.config['bot_language'] if self.force_language or not user else user.language_code
-        budget_period = lt(self.config['budget_period'], lang)
-        msg = lt('messages.budget_limit', lang, period=budget_period)
+        msg = self.budget_limit_message
 
         if user and user.id not in self.usage:
             self.usage[user.id] = UsageTracker(user.id, user.name)
@@ -102,6 +100,7 @@ def budget(func):
         return await func(self, update, context, *args, **kwargs)
 
     return wrapped
+
 
 # class send_action1(object):
 #     def __init__(self, func):
