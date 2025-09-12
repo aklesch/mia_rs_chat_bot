@@ -62,6 +62,9 @@ from uuid import uuid4
 uuid_pattern = "[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
 audio_preview_dir = 'bot/previews'
 VOICES = [os.path.splitext(filename)[0] for filename in os.listdir(audio_preview_dir)]
+MODER_ACTIONS = ["Approve", "Deny", "Ban", "Unbun"]
+# admin_action_pattern = f"^(Approve|Deny|Ban|Unban) ({uuid_pattern}|[0-9]+)$"
+moder_action_pattern = f"^({'|'.join(MODER_ACTIONS)}) ({uuid_pattern}|[0-9]+)$"
 
 class ChatGPTTelegramBot:
     """
@@ -76,25 +79,26 @@ class ChatGPTTelegramBot:
         """
         self.config = config
         self.openai = openai
-        bot_language = self.config['bot_language']
+        self.bot_language = self.config['bot_language']
+        self.chat_id = self.config.get('telegram_channel_id')
         self.commands = [
-            BotCommand(command='help', description=localized_text('help_description', bot_language)),
-            BotCommand(command='reset', description=localized_text('reset_description', bot_language)),
-            BotCommand(command='stats', description=localized_text('stats_description', bot_language)),
-            BotCommand(command='resend', description=localized_text('resend_description', bot_language))
+            BotCommand(command='help', description=localized_text('help_description', self.bot_language)),
+            BotCommand(command='reset', description=localized_text('reset_description', self.bot_language)),
+            BotCommand(command='stats', description=localized_text('stats_description', self.bot_language)),
+            BotCommand(command='resend', description=localized_text('resend_description', self.bot_language))
         ]
         # If imaging is enabled, add the "image" command to the list
         if self.config.get('enable_image_generation', False):
-            self.commands.append(BotCommand(command='image', description=localized_text('image_description', bot_language)))
+            self.commands.append(BotCommand(command='image', description=localized_text('image_description', self.bot_language)))
 
         if self.config.get('enable_tts_generation', False):
-            self.commands.append(BotCommand(command='tts', description=localized_text('tts_description', bot_language)))
+            self.commands.append(BotCommand(command='tts', description=localized_text('tts_description', self.bot_language)))
 
         self.group_commands = [BotCommand(
-            command='chat', description=localized_text('chat_description', bot_language)
+            command='chat', description=localized_text('chat_description', self.bot_language)
         )] + self.commands
-        self.disallowed_message = localized_text('disallowed', bot_language)
-        self.budget_limit_message = localized_text('budget_limit', bot_language)
+        self.disallowed_message = localized_text('disallowed', self.bot_language)
+        self.budget_limit_message = localized_text('budget_limit', self.bot_language)
         self.usage = {}
         self.last_message = {}
         self.inline_queries_cache = {}
@@ -174,15 +178,14 @@ class ChatGPTTelegramBot:
         """
         commands = self.group_commands if is_group_chat(update) else self.commands
         commands_description = [f'/{command.command} - {command.description}' for command in commands]
-        bot_language = self.config['bot_language']
         help_text = (
-                localized_text('help_text', bot_language)[0] +
+                localized_text('help_text', self.bot_language)[0] +
                 '\n\n' +
                 '\n'.join(commands_description) +
                 '\n\n' +
-                localized_text('help_text', bot_language)[1] +
+                localized_text('help_text', self.bot_language)[1] +
                 '\n\n' +
-                localized_text('help_text', bot_language)[2]
+                localized_text('help_text', self.bot_language)[2]
         )
         await update.message.reply_text(help_text, disable_web_page_preview=True)
 
@@ -215,62 +218,61 @@ class ChatGPTTelegramBot:
         chat_id = update.effective_chat.id
         chat_messages, chat_token_length = self.openai.get_conversation_stats(chat_id)
         remaining_budget = get_remaining_budget(self.config, self.usage, update)
-        bot_language = self.config['bot_language']
         
         text_current_conversation = (
-            f"*{localized_text('stats_conversation', bot_language)[0]}*:\n"
-            f"{chat_messages} {localized_text('stats_conversation', bot_language)[1]}\n"
-            f"{chat_token_length} {localized_text('stats_conversation', bot_language)[2]}\n"
+            f"*{localized_text('stats_conversation', self.bot_language)[0]}*:\n"
+            f"{chat_messages} {localized_text('stats_conversation', self.bot_language)[1]}\n"
+            f"{chat_token_length} {localized_text('stats_conversation', self.bot_language)[2]}\n"
             "----------------------------\n"
         )
         
         # Check if image generation is enabled and, if so, generate the image statistics for today
         text_today_images = ""
         if self.config.get('enable_image_generation', False):
-            text_today_images = f"{images_today} {localized_text('stats_images', bot_language)}\n"
+            text_today_images = f"{images_today} {localized_text('stats_images', self.bot_language)}\n"
 
         text_today_vision = ""
         if self.config.get('enable_vision', False):
-            text_today_vision = f"{vision_today} {localized_text('stats_vision', bot_language)}\n"
+            text_today_vision = f"{vision_today} {localized_text('stats_vision', self.bot_language)}\n"
 
         text_today_tts = ""
         if self.config.get('enable_tts_generation', False):
-            text_today_tts = f"{characters_today} {localized_text('stats_tts', bot_language)}\n"
+            text_today_tts = f"{characters_today} {localized_text('stats_tts', self.bot_language)}\n"
         
         text_today = (
-            f"*{localized_text('usage_today', bot_language)}:*\n"
-            f"{tokens_today} {localized_text('stats_tokens', bot_language)}\n"
+            f"*{localized_text('usage_today', self.bot_language)}:*\n"
+            f"{tokens_today} {localized_text('stats_tokens', self.bot_language)}\n"
             f"{text_today_images}"  # Include the image statistics for today if applicable
             f"{text_today_vision}"
             f"{text_today_tts}"
-            f"{transcribe_minutes_today} {localized_text('stats_transcribe', bot_language)[0]} "
-            f"{transcribe_seconds_today} {localized_text('stats_transcribe', bot_language)[1]}\n"
-            f"{localized_text('stats_total', bot_language)}{current_cost['cost_today']:.2f}\n"
+            f"{transcribe_minutes_today} {localized_text('stats_transcribe', self.bot_language)[0]} "
+            f"{transcribe_seconds_today} {localized_text('stats_transcribe', self.bot_language)[1]}\n"
+            f"{localized_text('stats_total', self.bot_language)}{current_cost['cost_today']:.2f}\n"
             "----------------------------\n"
         )
         
         text_month_images = ""
         if self.config.get('enable_image_generation', False):
-            text_month_images = f"{images_month} {localized_text('stats_images', bot_language)}\n"
+            text_month_images = f"{images_month} {localized_text('stats_images', self.bot_language)}\n"
 
         text_month_vision = ""
         if self.config.get('enable_vision', False):
-            text_month_vision = f"{vision_month} {localized_text('stats_vision', bot_language)}\n"
+            text_month_vision = f"{vision_month} {localized_text('stats_vision', self.bot_language)}\n"
 
         text_month_tts = ""
         if self.config.get('enable_tts_generation', False):
-            text_month_tts = f"{characters_month} {localized_text('stats_tts', bot_language)}\n"
+            text_month_tts = f"{characters_month} {localized_text('stats_tts', self.bot_language)}\n"
         
         # Check if image generation is enabled and, if so, generate the image statistics for the month
         text_month = (
-            f"*{localized_text('usage_month', bot_language)}:*\n"
-            f"{tokens_month} {localized_text('stats_tokens', bot_language)}\n"
+            f"*{localized_text('usage_month', self.bot_language)}:*\n"
+            f"{tokens_month} {localized_text('stats_tokens', self.bot_language)}\n"
             f"{text_month_images}"  # Include the image statistics for the month if applicable
             f"{text_month_vision}"
             f"{text_month_tts}"
-            f"{transcribe_minutes_month} {localized_text('stats_transcribe', bot_language)[0]} "
-            f"{transcribe_seconds_month} {localized_text('stats_transcribe', bot_language)[1]}\n"
-            f"{localized_text('stats_total', bot_language)}{current_cost['cost_month']:.2f}"
+            f"{transcribe_minutes_month} {localized_text('stats_transcribe', self.bot_language)[0]} "
+            f"{transcribe_seconds_month} {localized_text('stats_transcribe', self.bot_language)[1]}\n"
+            f"{localized_text('stats_total', self.bot_language)}{current_cost['cost_month']:.2f}"
         )
 
         # text_budget filled with conditional content
@@ -278,8 +280,8 @@ class ChatGPTTelegramBot:
         budget_period = self.config['budget_period']
         if remaining_budget < float('inf'):
             text_budget += (
-                f"{localized_text('stats_budget', bot_language)}"
-                f"{localized_text(budget_period, bot_language)}: "
+                f"{localized_text('stats_budget', self.bot_language)}"
+                f"{localized_text(budget_period, self.bot_language)}: "
                 f"${remaining_budget:.2f}.\n"
             )
 
@@ -302,7 +304,7 @@ class ChatGPTTelegramBot:
                             ' does not have anything to resend')
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
-                text=localized_text('resend_failed', self.config['bot_language'])
+                text=localized_text('resend_failed', self.bot_language)
             )
             return
 
@@ -332,7 +334,7 @@ class ChatGPTTelegramBot:
         self.openai.reset_chat_history(chat_id=chat_id, content=reset_content)
         await update.effective_message.reply_text(
             message_thread_id=get_thread_id(update),
-            text=localized_text('reset_done', self.config['bot_language'])
+            text=localized_text('reset_done', self.bot_language)
         )
 
     async def image(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -347,7 +349,7 @@ class ChatGPTTelegramBot:
         if image_query == '':
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
-                text=localized_text('image_no_prompt', self.config['bot_language'])
+                text=localized_text('image_no_prompt', self.bot_language)
             )
             return
 
@@ -385,7 +387,7 @@ class ChatGPTTelegramBot:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=f"{localized_text('image_fail', self.config['bot_language'])}: {str(e)}",
+                text=f"{localized_text('image_fail', self.bot_language)}: {str(e)}",
                 parse_mode=constants.ParseMode.MARKDOWN
             )
 
@@ -401,7 +403,7 @@ class ChatGPTTelegramBot:
         if tts_query == '':
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
-                text=localized_text('tts_no_prompt', self.config['bot_language'])
+                text=localized_text('tts_no_prompt', self.bot_language)
             )
             return
 
@@ -432,7 +434,7 @@ class ChatGPTTelegramBot:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=f"{localized_text('tts_fail', self.config['bot_language'])}: {str(e)}",
+                text=f"{localized_text('tts_fail', self.bot_language)}: {str(e)}",
                 parse_mode=constants.ParseMode.MARKDOWN
             )
 
@@ -454,7 +456,6 @@ class ChatGPTTelegramBot:
         chat_id = update.effective_chat.id
         filename = update.message.effective_attachment.file_unique_id
         filename_mp3 = f'{filename}.mp3'
-        bot_language = self.config['bot_language']
         try:
             media_file = await context.bot.get_file(update.message.effective_attachment.file_id)
             await media_file.download_to_drive(filename)
@@ -464,8 +465,8 @@ class ChatGPTTelegramBot:
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
                 text=(
-                    f"{localized_text('media_download_fail', bot_language)[0]}: "
-                    f"{str(e)}. {localized_text('media_download_fail', bot_language)[1]}"
+                    f"{localized_text('media_download_fail', self.bot_language)[0]}: "
+                    f"{str(e)}. {localized_text('media_download_fail', self.bot_language)[1]}"
                 ),
                 parse_mode=constants.ParseMode.MARKDOWN
             )
@@ -482,7 +483,7 @@ class ChatGPTTelegramBot:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=localized_text('media_type_fail', bot_language)
+                text=localized_text('media_type_fail', self.bot_language)
             )
             if os.path.exists(filename):
                 os.remove(filename)
@@ -509,7 +510,7 @@ class ChatGPTTelegramBot:
             if self.config['voice_reply_transcript'] and not response_to_transcription:
 
                 # Split into chunks of 4096 characters (Telegram's message limit)
-                transcript_output = f"_{localized_text('transcript', bot_language)}:_\n\"{transcript}\""
+                transcript_output = f"_{localized_text('transcript', self.bot_language)}:_\n\"{transcript}\""
                 chunks = split_into_chunks(transcript_output)
 
                 for index, transcript_chunk in enumerate(chunks):
@@ -529,8 +530,8 @@ class ChatGPTTelegramBot:
 
                 # Split into chunks of 4096 characters (Telegram's message limit)
                 transcript_output = (
-                    f"_{localized_text('transcript', bot_language)}:_\n\"{transcript}\"\n\n"
-                    f"_{localized_text('answer', bot_language)}:_\n{response}"
+                    f"_{localized_text('transcript', self.bot_language)}:_\n\"{transcript}\"\n\n"
+                    f"_{localized_text('answer', self.bot_language)}:_\n{response}"
                 )
                 chunks = split_into_chunks(transcript_output)
 
@@ -547,7 +548,7 @@ class ChatGPTTelegramBot:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=f"{localized_text('transcribe_fail', bot_language)}: {str(e)}",
+                text=f"{localized_text('transcribe_fail', self.bot_language)}: {str(e)}",
                 parse_mode=constants.ParseMode.MARKDOWN
             )
         finally:
@@ -582,7 +583,6 @@ class ChatGPTTelegramBot:
     async def _execute_vision(self, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt) -> None:
         chat_id = update.effective_chat.id
         image = update.message.effective_attachment[-1]
-        bot_language = self.config['bot_language']
         try:
             media_file = await context.bot.get_file(image.file_id)
             temp_file = io.BytesIO(await media_file.download_as_bytearray())
@@ -592,8 +592,8 @@ class ChatGPTTelegramBot:
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
                 text=(
-                    f"{localized_text('media_download_fail', bot_language)[0]}: "
-                    f"{str(e)}. {localized_text('media_download_fail', bot_language)[1]}"
+                    f"{localized_text('media_download_fail', self.bot_language)[0]}: "
+                    f"{str(e)}. {localized_text('media_download_fail', self.bot_language)[1]}"
                 ),
                 parse_mode=constants.ParseMode.MARKDOWN
             )
@@ -615,7 +615,7 @@ class ChatGPTTelegramBot:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=localized_text('media_type_fail', bot_language)
+                text=localized_text('media_type_fail', self.bot_language)
             )
 
         user_id = update.message.from_user.id
@@ -726,7 +726,7 @@ class ChatGPTTelegramBot:
                         await update.effective_message.reply_text(
                             message_thread_id=get_thread_id(update),
                             reply_to_message_id=get_reply_to_message_id(self.config, update),
-                            text=f"{localized_text('vision_fail', bot_language)}: {str(e)}",
+                            text=f"{localized_text('vision_fail', self.bot_language)}: {str(e)}",
                             parse_mode=constants.ParseMode.MARKDOWN
                         )
             except Exception as e:
@@ -734,7 +734,7 @@ class ChatGPTTelegramBot:
                 await update.effective_message.reply_text(
                     message_thread_id=get_thread_id(update),
                     reply_to_message_id=get_reply_to_message_id(self.config, update),
-                    text=f"{localized_text('vision_fail', bot_language)}: {str(e)}",
+                    text=f"{localized_text('vision_fail', self.bot_language)}: {str(e)}",
                     parse_mode=constants.ParseMode.MARKDOWN
                 )
         vision_token_price = self.config['vision_token_price']
@@ -875,7 +875,7 @@ class ChatGPTTelegramBot:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=f"{localized_text('chat_fail', self.config['bot_language'])} {str(e)}",
+                text=f"{localized_text('chat_fail', self.bot_language)} {str(e)}",
                 parse_mode=constants.ParseMode.MARKDOWN
             )
 
@@ -932,16 +932,15 @@ class ChatGPTTelegramBot:
         """
         try:
             reply_markup = None
-            bot_language = self.config['bot_language']
             if callback_data:
                 reply_markup = InlineKeyboardMarkup([[
-                    InlineKeyboardButton(text=f'🤖 {localized_text("answer_with_chatgpt", bot_language)}',
+                    InlineKeyboardButton(text=f'🤖 {localized_text("answer_with_chatgpt", self.bot_language)}',
                                          callback_data=callback_data)
                 ]])
 
             inline_query_result = InlineQueryResultArticle(
                 id=result_id,
-                title=localized_text("ask_chatgpt", bot_language),
+                title=localized_text("ask_chatgpt", self.bot_language),
                 input_message_content=InputTextMessageContent(message_content),
                 description=message_content,
                 thumbnail_url='https://user-images.githubusercontent.com/11541888/223106202-7576ff11-2c8e-408d-94ea-b02a7a32149a.png',
@@ -962,9 +961,8 @@ class ChatGPTTelegramBot:
         name = update.callback_query.from_user.name
         callback_data_suffix = "gpt:"
         query = ""
-        bot_language = self.config['bot_language']
-        answer_tr = localized_text("answer", bot_language)
-        loading_tr = localized_text("loading", bot_language)
+        answer_tr = localized_text("answer", self.bot_language)
+        loading_tr = localized_text("loading", self.bot_language)
 
         try:
             if callback_data.startswith(callback_data_suffix):
@@ -977,15 +975,15 @@ class ChatGPTTelegramBot:
                     self.inline_queries_cache.pop(unique_id)
                 else:
                     error_message = (
-                        f'{localized_text("error", bot_language)}. '
-                        f'{localized_text("try_again", bot_language)}'
+                        f'{localized_text("error", self.bot_language)}. '
+                        f'{localized_text("try_again", self.bot_language)}'
                     )
                     await edit_message_with_retry(context, chat_id=None, message_id=inline_message_id,
                                                   text=f'{query}\n\n_{answer_tr}:_\n{error_message}',
                                                   is_inline=True)
                     return
 
-                unavailable_message = localized_text("function_unavailable_in_inline_mode", bot_language)
+                unavailable_message = localized_text("function_unavailable_in_inline_mode", self.bot_language)
                 if self.config['stream']:
                     stream_response = self.openai.get_chat_response_stream(chat_id=user_id, query=query)
                     i = 0
@@ -1054,7 +1052,7 @@ class ChatGPTTelegramBot:
         except Exception as e:
             logging.error(f'Failed to respond to an inline query via button callback: {e}')
             logging.exception(e)
-            localized_answer = localized_text('chat_fail', self.config['bot_language'])
+            localized_answer = localized_text('chat_fail', self.bot_language)
             await edit_message_with_retry(context, chat_id=None, message_id=inline_message_id,
                                           text=f"{query}\n\n_{answer_tr}:_\n{localized_answer} {str(e)}",
                                           is_inline=True)
@@ -1065,10 +1063,9 @@ class ChatGPTTelegramBot:
         inline_message_id = update.callback_query.inline_message_id
         name = update.callback_query.from_user.name
         query = ""
-        bot_language = self.config['bot_language']
-        answer_tr = localized_text("answer", bot_language)
-        loading_tr = localized_text("loading", bot_language)
-        unavailable_message = localized_text("function_unavailable_in_inline_mode", bot_language)
+        answer_tr = localized_text("answer", self.bot_language)
+        loading_tr = localized_text("loading", self.bot_language)
+        unavailable_message = localized_text("function_unavailable_in_inline_mode", self.bot_language)
         # Edit the current message to indicate that the answer is being processed
         await context.bot.edit_message_text(inline_message_id=inline_message_id,
                                             text=f'{query}\n\n_{answer_tr}:_\n{loading_tr}',
@@ -1162,6 +1159,65 @@ class ChatGPTTelegramBot:
             result_id = str(uuid4())
             await self.send_inline_query_result(update, result_id, message_content=self.budget_limit_message)
 
+    @admin_restricted
+    async def moder_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        moder = update.effective_user
+        query = update.callback_query
+        action = query.data.split()[0]
+        key = query.data.split()[-1]
+        user = context.bot_data.get(key)
+
+        await query.answer()
+
+        if key is not None and query.message in context.bot_data['mod_msgs'][key][moder.id]:
+            context.bot_data['mod_msgs'][key][moder.id].remove(query.message)
+
+        match action:
+            case "Approve":
+                print("Approve Action")
+                action_text = 'approved'
+                print(action_text)
+                self.user_ids = user
+                context.bot_data['users'].add(user)
+            case "Deny":
+                print("Deny Action")
+                action_text = 'banned'
+                print(action_text)
+                self.banned_ids = user
+                context.bot_data['banned'].add(user)
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text="Админ послал тебя на три буквы, не пиши сюда больше",
+                    disable_web_page_preview=True
+                )
+            case "Ban":
+                print("Ban Action")
+                return
+            case "Unban":
+                print("Unban Action")
+                return
+            case _:
+                print("Default Action")
+                return
+
+        await query.edit_message_text(
+            text=f"User {user.mention_html()} was {action_text}!",
+            reply_markup=None,
+            parse_mode="HTML"
+        )
+
+        for chat_id in context.bot_data['mod_msgs'][key].values():
+            for msg in chat_id:
+                await msg.edit_text(
+                    text=f"User {user.mention_html()} was {action_text} by {moder.mention_html()}!",
+                    reply_markup=None,
+                    parse_mode="HTML"
+                )
+                chat_id.remove(msg)
+
+        logging.info(f"User {user.id} was {action_text} by moderator {moder.id}")
+        del context.bot_data[key]
+
     async def post_init(self, application: Application) -> None:
         """
         Post initialization hook for the bot.
@@ -1177,8 +1233,6 @@ class ChatGPTTelegramBot:
 
         logging.info(f'Initializing @{bot_user.username}{log_str}...')
 
-        logging.info(f'Initializing @{bot_user.username}...')
-
         user_budgets = self.config['user_budgets'].split(',')
         if len(user_budgets) == 1:
             logging.warning(f"Only one value for budgets is set, this value ({user_budgets}) will be used as "
@@ -1187,7 +1241,7 @@ class ChatGPTTelegramBot:
         application.bot_data.setdefault('admins', set())
         application.bot_data.setdefault('moders', set())
         application.bot_data.setdefault('users', set())
-        application.bot_data['adm_msgs'] = {}
+        application.bot_data['mod_msgs'] = {}
         for user in application.bot_data['users']:
             self.user_ids = user
 
@@ -1199,22 +1253,71 @@ class ChatGPTTelegramBot:
         """
         pattern = re.compile(uuid_pattern)
         [application.bot_data.pop(key, None) for key in list(application.bot_data) if pattern.match(key)]
-        for key in application.bot_data['adm_msgs']:
-            for chat_id, msgs in application.bot_data['adm_msgs'][key].items():
+        for key in application.bot_data['mod_msgs']:
+            for chat_id, msgs in application.bot_data['mod_msgs'][key].items():
                 if not msgs:
                     continue
                 await application.bot.delete_messages(chat_id, [msg.id for msg in msgs])
-        del application.bot_data['adm_msgs']
+        del application.bot_data['mod_msgs']
+
+    async def _update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Check user"""
+        if not self.chat_id:
+            pass
+
+        if not update.effective_user:
+            raise ApplicationHandlerStop
+
+        user = update.effective_user
+
+        if user.id in self.admin_ids and user not in context.bot_data['admins']:
+            context.bot_data['admins'].add(user)
+            return
+        if user.id in self.moder_ids and user not in context.bot_data['moders']:
+            context.bot_data['moders'].add(user)
+            return
+        if user.id in self.user_ids and user not in context.bot_data['users']:
+            context.bot_data['users'].add(user)
+            return
+        if user.id not in self.all_ids:
+            await update.effective_message.reply_text(
+                message_thread_id=get_thread_id(update),
+                text="Дождитесь разрешения модератора",  # TODO: localize
+                disable_web_page_preview=True
+            )
+            key = str(uuid4())  # Generate ID and separate value from command
+            context.bot_data[key] = user  # Store user in bot_data
+
+            keyboard = [
+                [InlineKeyboardButton("Approve", callback_data=f"Approve {key}")],
+                [InlineKeyboardButton("Deny", callback_data=f"Deny {key}")]
+            ]
+
+            reply_markup = InlineKeyboardMarkup(keyboard)
+
+            for moder in self.moder_ids:
+                try:
+                    mod_msg = await context.bot.send_message(
+                        chat_id=moder,
+                        reply_markup=reply_markup,
+                        parse_mode="HTML",
+                        text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
+                    )
+                    context.bot_data['mod_msgs'].setdefault(key, {}).setdefault(moder, []).append(mod_msg)
+                except:
+                    continue
+
+            raise ApplicationHandlerStop
 
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C
         """
         pathlib.Path("data").mkdir(exist_ok=True)
-
         persistence = PicklePersistence(
             filepath="data/mia_rs_chat_bot_data"
         )
+
         application = (
             ApplicationBuilder()
             .token(self.config['token'])
@@ -1227,6 +1330,7 @@ class ChatGPTTelegramBot:
             .build()
         )
 
+        application.add_handler(TypeHandler(Update, callback=self._update), group=-1)
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
         application.add_handler(CommandHandler('image', self.image))
@@ -1248,6 +1352,7 @@ class ChatGPTTelegramBot:
         application.add_handler(InlineQueryHandler(self.inline_query, chat_types=[
             constants.ChatType.GROUP, constants.ChatType.SUPERGROUP, constants.ChatType.PRIVATE
         ]))
+        application.add_handler(CallbackQueryHandler(self.moder_actions, pattern=moder_action_pattern))
         application.add_handler(CallbackQueryHandler(self.handle_callback_inline_query))
 
         application.add_error_handler(error_handler)
