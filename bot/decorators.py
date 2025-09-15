@@ -17,10 +17,11 @@ def check_permission(func):
     @functools.wraps(func)
     async def wrapped(self, update, context, *args, **kwargs):
         user = update.effective_user
-        if not user or user.is_bot:
+        if not user or user.is_bot or user.id in self.muted_ids:
             raise ApplicationHandlerStop
 
         check = False
+        banned = False
 
         if user.id in self.admin_ids:
             context.bot_data['admins'].add(user)
@@ -31,10 +32,14 @@ def check_permission(func):
         elif user.id in self.user_ids:
             context.bot_data['users'].add(user)
             check = True
+        elif user.id in self.banned_ids:
+            context.bot_data['banned'].add(user)
+            banned = True
+            check = False
 
         if not check:
-            logging.info(f'New user {user.name} is trying to access the bot')
-            return await func(self, update, context, *args, **kwargs)
+            logging.info(f"New user {user.name} is trying to access the bot")
+            return await func(self, update, context, banned=banned, *args, **kwargs)
 
         return None
 
