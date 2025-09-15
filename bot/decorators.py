@@ -10,6 +10,37 @@ from utils import (
 )
 
 
+def check_permission(func):
+    """
+    Check user permission to use bot
+    """
+    @functools.wraps(func)
+    async def wrapped(self, update, context, *args, **kwargs):
+        user = update.effective_user
+        if not user or user.is_bot:
+            raise ApplicationHandlerStop
+
+        check = False
+
+        if user.id in self.admin_ids:
+            context.bot_data['admins'].add(user)
+            check = True
+        elif user.id in self.moder_ids:
+            context.bot_data['moders'].add(user)
+            check = True
+        elif user.id in self.user_ids:
+            context.bot_data['users'].add(user)
+            check = True
+
+        if not check:
+            logging.info(f'New user {user.name} is trying to access the bot')
+            return await func(self, update, context, *args, **kwargs)
+
+        return None
+
+    return wrapped
+
+
 def admin_restricted(func):
     """
     Decorator for handlers allowing only admin access.
@@ -19,7 +50,7 @@ def admin_restricted(func):
         user_id = update.effective_user.id
         if user_id not in self.admin_ids:
             logging.warning(f"Unauthorized access to {func.__name__} from user {user_id}")
-            return
+            return None
         return await func(self, update, context, *args, **kwargs)
 
     return wrapped
@@ -27,14 +58,14 @@ def admin_restricted(func):
 
 def moder_restricted(func):
     """
-    Decorator for handlers allowing only moderators access.
+    Decorator for handlers allowing only moderators or admins access.
     """
     @functools.wraps(func)
     async def wrapped(self, update, context, *args, **kwargs):
         user_id = update.effective_user.id
         if user_id not in self.moder_ids | self.admin_ids:
             logging.warning(f"Unauthorized access to {func.__name__} from user {user_id}")
-            return
+            return None
         return await func(self, update, context, *args, **kwargs)
 
     return wrapped
@@ -52,12 +83,12 @@ def user_restricted(func):
         if user_id not in self.all_ids:
             await self.send_disallowed_message(update, context)
             logging.warning(f"Unauthorized access to '{func.__name__}' from user {user_id}")
-            return
+            return None
         if not is_inline and is_group_chat(update):
             for user in self.admin_ids | self.user_ids:
                 if not await is_user_in_group(update, context, user):
                     # logging.info(f'{user} is a member. Allowing group chat message...')
-                    return
+                    return None
             logging.info(f'Group chat messages from user {name} (id: {user_id}) are not allowed')
         return await func(self, update, context, *args, **kwargs)
 
