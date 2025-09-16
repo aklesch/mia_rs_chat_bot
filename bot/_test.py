@@ -77,6 +77,7 @@ telegram_config = {
     'banned_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_BANNED_USER_IDS')),
     'budget_period': os.environ.get('BUDGET_PERIOD', 'monthly').lower(),
     'user_budgets': os.environ.get('USER_BUDGETS', os.environ.get('MONTHLY_USER_BUDGETS', '*')),
+    'persistence_file': os.environ.get('PICKLE_PERSISTENCE_FILE', "data/mia_rs_chat_bot_data")
 }
 
 uuid_pattern = "[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
@@ -103,7 +104,6 @@ class TelegramBot:
         self.__moder_ids: set[User.id] = config['moder_ids']
         self.__user_ids: set[User.id] = config['user_ids']
         self.__banned_ids: set[User.id] = config['banned_ids']
-        self.__muted_ids: set[User.id] = set()
 
     @property
     def all_ids(self) -> set[User.id]:
@@ -177,22 +177,6 @@ class TelegramBot:
         """
         self.__banned_ids.add(user.id)
 
-    @property
-    def muted_ids(self) -> set[User.id]:
-        """
-        Returns set of bot banned or denied user IDs.
-        :return: set[User.id]
-        """
-        return self.__muted_ids
-
-    @muted_ids.setter
-    def muted_ids(self, user: User) -> None:
-        """
-        Adds user to the set of bot banned or denied user IDs.
-        :param user: User
-        """
-        self.__muted_ids.add(user.id)
-
     def del_user_id(self, user: User, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.bot_data['users'].discard(user)
         self.__user_ids.discard(user.id)
@@ -214,7 +198,7 @@ class TelegramBot:
 
     async def echo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Echo the user message."""
-        await update.message.reply_text(update.message.text)
+        await update.message.reply_text(f"echo: {update.message.text}")
 
     @moder_restricted
     async def moder_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -243,21 +227,23 @@ class TelegramBot:
                 action_text = 'denied'
                 self.banned_ids = user
                 context.bot_data['banned'].add(user)
-                # await context.bot.send_message(
-                #     chat_id=user.id,
-                #     text="Админ послал тебя на три буквы, не пиши сюда больше",
-                #     disable_web_page_preview=True
-                # )
-            case "Ban":
-                action_text = 'banned and muted'
-                self.muted_ids = user
-                context.bot_data['muted'].add(user)
-                context.bot_data['banned'].discard(user)
-                self.__banned_ids.discard(user.id)
-                return
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text="⛔ Извините, Вам запрещено использовать данного бота",
+                    disable_web_page_preview=True
+                )
             case "Unban":
                 print("Unban Action")
-                return
+                action_text = 'unbanned'
+                context.bot_data['banned'].discard(user)
+                self.__banned_ids.discard(user.id)
+                self.user_ids = user
+                context.bot_data['users'].add(user)
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text="✅ Теперь Вы можете пользоваться ботом!",
+                    disable_web_page_preview=True
+                )
             case _:
                 print("Default Action")
                 return
@@ -291,7 +277,6 @@ class TelegramBot:
             self.channel = await application.bot.get_chat(self.chat_id)
             log_str = f" with @{self.channel.username} subscription check"
 
-        logging.info(f'Initializing @{bot_user.username}{log_str}...')
 
         user_budgets = self.config['user_budgets'].split(',')
         if len(user_budgets) == 1:
@@ -302,14 +287,13 @@ class TelegramBot:
         application.bot_data.setdefault('moders', set())
         application.bot_data.setdefault('users', set())
         application.bot_data.setdefault('banned', set())
-        application.bot_data.setdefault('muted', set())
         application.bot_data['mod_msgs'] = {}
         for user in application.bot_data['users']:
             self.user_ids = user
         for user in application.bot_data['banned']:
             self.banned_ids = user
-        for user in application.bot_data['muted']:
-            self.muted_ids = user
+
+        logging.info(f'Initializing @{bot_user.username}{log_str}...')
 
     async def post_stop(self, application: Application) -> None:
         """
@@ -328,11 +312,10 @@ class TelegramBot:
 
     async def send_message(self, update: Update, _: ContextTypes.DEFAULT_TYPE, is_inline=False, msg: str = None) -> None:
         """
-        Sends the disallowed message to the user
+        Sends the message to the user
         """
         if msg is None:
-            # msg = f"⛔ Вам запрещено использовать данного бота"
-            msg = f"Вам запрещено использовать данного бота"
+            msg = f"⛔ Вам запрещено использовать данного бота"
 
         if is_inline:
             result_id = str(uuid4())
@@ -345,29 +328,11 @@ class TelegramBot:
             )
 
     @check_permission
-    async def _update(self, update: Update, context: ContextTypes.DEFAULT_TYPE, banned: bool = False) -> None:
+    async def _update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Ask bot moderators fow actions on new users
         """
         user = update.effective_user
-        if banned:
-            key = str(uuid4())  # Generate ID and separate value from command
-            context.bot_data[key] = user  # Store user in bot_data
-
-            for moder in self.moder_ids:
-                try:
-                    mod_msg = await context.bot.send_message(
-                        chat_id=moder,
-                        reply_markup=await moder_ban_keyboard(key),
-                        parse_mode=constants.ParseMode.HTML,
-                        text=f"Забаненый пользователь {user.mention_html()} опять ломится! Что с ним делать?"
-                    )
-                    context.bot_data['mod_msgs'].setdefault(key, {}).setdefault(moder, []).append(mod_msg)
-                except:
-                    continue
-
-            raise ApplicationHandlerStop
-
         if user not in context.bot_data.values():
             user_msg = "⚠️Дождитесь разрешения модератора"
 
@@ -405,7 +370,7 @@ class TelegramBot:
         """
         pathlib.Path("data").mkdir(exist_ok=True)
         persistence = PicklePersistence(
-            filepath="data/mia_rs_chat_bot_data_test"
+            filepath=self.config['persistence_file']
         )
 
         application = (

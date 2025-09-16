@@ -10,7 +10,7 @@ from dotenv import load_dotenv
 from helpers import create_user_ids_set
 from plugin_manager import PluginManager
 from openai_helper import OpenAIHelper, default_max_tokens, are_functions_available
-from telegram_bot import ChatGPTTelegramBot
+from telegram_bot import TelegramBot
 
 
 # Read .env file
@@ -100,15 +100,25 @@ telegram_config = {
     'admin_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_ADMIN_USER_IDS')),
     'moder_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_MODER_USER_IDS')),
     'user_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_ALLOWED_USER_IDS')),
+    'banned_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_BANNED_USER_IDS')),
     'telegram_channel_id': os.environ.get('TELEGRAM_CHANNEL_ID'),
     'enable_quoting': os.environ.get('ENABLE_QUOTING', 'true').lower() == 'true',
     'enable_image_generation': os.environ.get('ENABLE_IMAGE_GENERATION', 'true').lower() == 'true',
     'enable_transcription': os.environ.get('ENABLE_TRANSCRIPTION', 'true').lower() == 'true',
     'enable_vision': os.environ.get('ENABLE_VISION', 'true').lower() == 'true',
     'enable_tts_generation': os.environ.get('ENABLE_TTS_GENERATION', 'true').lower() == 'true',
+    'budget': {
+        'admin': float(os.environ.get('ADMIN_BUDGETS', 10)),
+        'moder': float(os.environ.get('MODER_BUDGETS', 5)),
+        'user': float(os.environ.get('USER_BUDGETS', 1)),
+        'guest': float(os.environ.get('GUEST_BUDGET', 0)),
+        'period': os.environ.get('BUDGET_PERIOD', 'daily').lower(),
+    },
     'budget_period': os.environ.get('BUDGET_PERIOD', 'monthly').lower(),
-    'user_budgets': os.environ.get('USER_BUDGETS', os.environ.get('MONTHLY_USER_BUDGETS', '*')),
-    'guest_budget': float(os.environ.get('GUEST_BUDGET', os.environ.get('MONTHLY_GUEST_BUDGET', '100.0'))),
+    'admin_budgets': float(os.environ.get('ADMIN_BUDGETS', 10)),
+    'moder_budgets': float(os.environ.get('MODER_BUDGETS', 5)),
+    'user_budgets': float(os.environ.get('USER_BUDGETS', 1)),
+    'guest_budget': float(os.environ.get('GUEST_BUDGET', 0)),
     'stream': os.environ.get('STREAM', 'true').lower() == 'true',
     'proxy': os.environ.get('PROXY', None) or os.environ.get('TELEGRAM_PROXY', None),
     'voice_reply_transcript': os.environ.get('VOICE_REPLY_WITH_TRANSCRIPT_ONLY', 'false').lower() == 'true',
@@ -126,6 +136,7 @@ telegram_config = {
     'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
     'force_language': os.environ.get('FORCE_LANGUAGE', 'false').lower() == 'true',
     'show_usage': os.environ.get('SHOW_USAGE', 'false').lower() == 'true',
+    'persistence_file': os.environ.get('PICKLE_PERSISTENCE_FILE', "data/mia_rs_chat_bot_data")
 }
 
 plugin_config = {
@@ -135,5 +146,5 @@ plugin_config = {
 # Setup and run ChatGPT and Telegram bot
 plugin_manager = PluginManager(config=plugin_config)
 openai_helper = OpenAIHelper(config=openai_config, plugin_manager=plugin_manager)
-telegram_bot = ChatGPTTelegramBot(config=telegram_config, openai=openai_helper)
+telegram_bot = TelegramBot(config=telegram_config, openai=openai_helper)
 telegram_bot.run()

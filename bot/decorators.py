@@ -1,12 +1,14 @@
-import logging
+from __future__ import annotations
 
 import functools
-from usage_tracker import UsageTracker
+import logging
+
+from telegram.ext import ApplicationHandlerStop
 from utils import (
     get_thread_id,
     is_group_chat,
     is_user_in_group,
-    get_remaining_budget,
+    get_remaining_budget_new,
 )
 
 
@@ -17,31 +19,21 @@ def check_permission(func):
     @functools.wraps(func)
     async def wrapped(self, update, context, *args, **kwargs):
         user = update.effective_user
-        if not user or user.is_bot or user.id in self.muted_ids:
-            raise ApplicationHandlerStop
 
-        check = False
-        banned = False
-
-        if user.id in self.admin_ids:
-            context.bot_data['admins'].add(user)
-            check = True
-        elif user.id in self.moder_ids:
-            context.bot_data['moders'].add(user)
-            check = True
-        elif user.id in self.user_ids:
-            context.bot_data['users'].add(user)
-            check = True
-        elif user.id in self.banned_ids:
-            context.bot_data['banned'].add(user)
-            banned = True
-            check = False
-
-        if not check:
-            logging.info(f"New user {user.name} is trying to access the bot")
-            return await func(self, update, context, banned=banned, *args, **kwargs)
-
-        return None
+        match user:
+            case _ if not user or user.is_bot or user.id in self.banned_ids:
+                raise ApplicationHandlerStop
+            case _ if user.id in self.all_ids:
+                if user.id in self.admin_ids:
+                    context.bot_data['admins'].add(user)
+                if user.id in self.moder_ids:
+                    context.bot_data['moders'].add(user)
+                if user.id in self.user_ids:
+                    context.bot_data['users'].add(user)
+                return None
+            case _:
+                logging.info(f"New user {user.name} is trying to access the bot")
+                return await func(self, update, context, *args, **kwargs)
 
     return wrapped
 
@@ -84,7 +76,7 @@ def user_restricted(func):
     async def wrapped(self, update, context, is_inline=False, *args, **kwargs):
         user_id = update.inline_query.from_user.id if is_inline else update.message.from_user.id
         name = update.inline_query.from_user.name if is_inline else update.message.from_user.name
-        print(user_id, "is", " in" if user_id in self.all_ids else "not in", self.all_ids)
+        # print(user_id, "is", " in" if user_id in self.all_ids else "not in", self.all_ids)
         if user_id not in self.all_ids:
             await self.send_disallowed_message(update, context)
             logging.warning(f"Unauthorized access to '{func.__name__}' from user {user_id}")
@@ -119,23 +111,33 @@ def send_action(action):
     return decorator
 
 
-def budget(func):
-    @functools.wraps(func)
-    async def wrapped(self, update, context, is_inline=False, *args, **kwargs):
-        user = update.inline_query.from_user if is_inline else update.effective_user
-        msg = self.budget_limit_message
+# Decorators with optional args
+# https://realpython.com/primer-on-python-decorators/#creating-decorators-with-optional-arguments
+def check_budget(is_inline=False):
+    """
+    Checks user remaining budget for period
+    """
+    def docorator(func):
+        @functools.wraps(func)
+        async def wrapped(self, update, context, *args, **kwargs):
+            msg = self.budget_limit_message
 
-        if user and user.id not in self.usage:
-            self.usage[user.id] = UsageTracker(user.id, user.name)
-        remaining_budget = get_remaining_budget(self.config, self.admin_ids, self.user_ids, self.usage, update, is_inline=is_inline)
+            remaining_budget = get_remaining_budget_new(self, update, is_inline=is_inline)
 
-        if not remaining_budget > 0:
-            logging.warning(f'User {user.name} (id: {user.id}) reached their usage limit')
-            await self._send_message(update, context, msg, is_inline)
-            return
-        return await func(self, update, context, *args, **kwargs)
+            if not remaining_budget > 0:
+                logging.warning(f'User {user.name} (id: {user.id}) reached their usage limit')
+                await self._send_message(update, context, msg, is_inline)
+                return None
+            return await func(self, update, context, *args, **kwargs)
 
-    return wrapped
+        return wrapped
+
+    if callable(is_inline):
+        func_to_decorate = is_inline
+        is_inline = False
+        return docorator(func_to_decorate)
+
+    return docorator
 
 
 # class send_action1(object):

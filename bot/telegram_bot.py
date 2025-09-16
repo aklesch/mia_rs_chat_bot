@@ -9,6 +9,7 @@ import re
 
 from decorators import *
 from i18n import localized_text
+from inline_keyboards import *
 from openai_helper import OpenAIHelper
 from PIL import Image
 from pydub import AudioSegment
@@ -62,11 +63,10 @@ from uuid import uuid4
 uuid_pattern = "[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
 audio_preview_dir = 'bot/previews'
 VOICES = [os.path.splitext(filename)[0] for filename in os.listdir(audio_preview_dir)]
-MODER_ACTIONS = ["Approve", "Deny", "Ban", "Unbun"]
-# admin_action_pattern = f"^(Approve|Deny|Ban|Unban) ({uuid_pattern}|[0-9]+)$"
+MODER_ACTIONS = ["Approve", "Deny", "Ban", "Unban", "Skip"]
 moder_action_pattern = f"^({'|'.join(MODER_ACTIONS)}) ({uuid_pattern}|[0-9]+)$"
 
-class ChatGPTTelegramBot:
+class TelegramBot:
     """
     Class representing a ChatGPT Telegram Bot.
     """
@@ -97,28 +97,29 @@ class ChatGPTTelegramBot:
         self.group_commands = [BotCommand(
             command='chat', description=localized_text('chat_description', self.bot_language)
         )] + self.commands
-        self.disallowed_message = localized_text('disallowed', self.bot_language)
-        self.budget_limit_message = localized_text('budget_limit', self.bot_language)
-        self.usage = {}
-        self.last_message = {}
-        self.inline_queries_cache = {}
-        self.channel = ChatFullInfo
+        self.disallowed_message:    str = localized_text('disallowed', self.bot_language)
+        self.budget_limit_message:  str = localized_text('budget_limit', self.bot_language)
+        self.usage:                 dict = {}
+        self.last_message:          dict = {}
+        self.inline_queries_cache:  dict = {}
+        self.channel:               ChatFullInfo | None = None
 
-        self.__admin_ids: set = config['admin_ids']
-        self.__moder_ids: set = config['moder_ids']
-        self.__user_ids: set = config['user_ids']
+        self.__admin_ids:   set[User.id] = config['admin_ids']
+        self.__moder_ids:   set[User.id] = config['moder_ids']
+        self.__user_ids:    set[User.id] = config['user_ids']
+        self.__banned_ids:  set[User.id] = config['banned_ids']
 
     @property
-    def all_ids(self) -> set[int]:
+    def all_ids(self) -> set[User.id]:
         """
         Returns set of bot admin IDs.
         :return: set[int]
         """
         # return self.__admin_ids | self.__user_ids
-        return self.admin_ids | self.user_ids | self.moder_ids
+        return self.admin_ids | self.moder_ids | self.user_ids
 
     @property
-    def admin_ids(self) -> set[int]:
+    def admin_ids(self) -> set[User.id]:
         """
         Returns set of bot admin IDs.
         :return: set[int]
@@ -134,7 +135,7 @@ class ChatGPTTelegramBot:
         self.__admin_ids.add(admin.id)
 
     @property
-    def moder_ids(self) -> set[int]:
+    def moder_ids(self) -> set[User.id]:
         """
         Returns set of bot moderators IDs.
         :return: set[int]
@@ -150,7 +151,7 @@ class ChatGPTTelegramBot:
         self.__moder_ids.add(moder.id)
 
     @property
-    def user_ids(self) -> set[int]:
+    def user_ids(self) -> set[User.id]:
         """
         Returns set of bot user IDs.
         :return: set[int]
@@ -164,6 +165,22 @@ class ChatGPTTelegramBot:
         :param user: telegram._user
         """
         self.__user_ids.add(user.id)
+
+    @property
+    def banned_ids(self) -> set[User.id]:
+        """
+        Returns set of bot banned or denied user IDs.
+        :return: set[User.id]
+        """
+        return self.__banned_ids
+
+    @banned_ids.setter
+    def banned_ids(self, user: User) -> None:
+        """
+        Adds user to the set of bot banned or denied user IDs.
+        :param user: User
+        """
+        self.__banned_ids.add(user.id)
 
     def del_user_id(self, user: User, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.bot_data['users'].discard(user)
@@ -337,12 +354,12 @@ class ChatGPTTelegramBot:
             text=localized_text('reset_done', self.bot_language)
         )
 
+    @check_budget
     async def image(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Generates an image for the given prompt using DALL·E APIs
         """
-        if not self.config['enable_image_generation'] \
-                or not await self.check_allowed_and_within_budget(update, context):
+        if not self.config['enable_image_generation']:
             return
 
         image_query = message_text(update.message)
@@ -391,12 +408,12 @@ class ChatGPTTelegramBot:
                 parse_mode=constants.ParseMode.MARKDOWN
             )
 
+    @check_budget
     async def tts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Generates an speech for the given input using TTS APIs
         """
-        if not self.config['enable_tts_generation'] \
-                or not await self.check_allowed_and_within_budget(update, context):
+        if not self.config['enable_tts_generation']:
             return
 
         tts_query = message_text(update.message)
@@ -438,11 +455,12 @@ class ChatGPTTelegramBot:
                 parse_mode=constants.ParseMode.MARKDOWN
             )
 
+    @check_budget
     async def transcribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Transcribe audio messages.
         """
-        if not self.config['enable_transcription'] or not await self.check_allowed_and_within_budget(update, context):
+        if not self.config['enable_transcription']:
             return
 
         if is_group_chat(update) and self.config['ignore_group_transcriptions']:
@@ -557,11 +575,12 @@ class ChatGPTTelegramBot:
             if os.path.exists(filename):
                 os.remove(filename)
 
+    @check_budget
     async def vision(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Interpret image using vision model.
         """
-        if not self.config['enable_vision'] or not await self.check_allowed_and_within_budget(update, context):
+        if not self.config['enable_vision']:
             return
 
         prompt = update.message.caption
@@ -744,14 +763,12 @@ class ChatGPTTelegramBot:
         if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
             self.usage["guests"].add_vision_tokens(total_tokens, vision_token_price)
 
+    @check_budget
     async def prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         React to incoming messages and respond accordingly.
         """
         if update.edited_message or not update.message or update.message.via_bot:
-            return
-
-        if not await self.check_allowed_and_within_budget(update, context):
             return
 
         logging.info(
@@ -909,6 +926,7 @@ class ChatGPTTelegramBot:
 
         return total_tokens
 
+    @check_budget(True)
     async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Handle the inline query. This is run when you type: @botusername <query>
@@ -916,8 +934,8 @@ class ChatGPTTelegramBot:
         query = update.inline_query.query
         if len(query) < 3:
             return
-        if not await self.check_allowed_and_within_budget(update, context, is_inline=True):
-            return
+        # if not await self.check_allowed_and_within_budget(update, context, is_inline=True):
+        #     return
 
         callback_data_suffix = "gpt:"
         result_id = str(uuid4())
@@ -1116,21 +1134,24 @@ class ChatGPTTelegramBot:
 
         return True
 
-    async def _send_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
+    async def _send_message(self, update: Update, _: ContextTypes.DEFAULT_TYPE,
                             msg: str, is_inline: bool = False, parse_mode: constants.ParseMode = None) -> None:
         """
         Sends message to the user.
         """
-        if not is_inline:
+        if msg is None:
+            msg = f"⛔ Вам запрещено использовать данного бота"
+
+        if is_inline:
+            result_id = str(uuid4())
+            await self.send_inline_query_result(update, result_id, message_content=msg)
+        else:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 text=msg,
                 parse_mode=parse_mode,
                 disable_web_page_preview=True
             )
-        else:
-            result_id = str(uuid4())
-            await self.send_inline_query_result(update, result_id, message_content=msg)
 
     async def send_disallowed_message(self, update: Update, _: ContextTypes.DEFAULT_TYPE, is_inline=False):
         """
@@ -1159,7 +1180,7 @@ class ChatGPTTelegramBot:
             result_id = str(uuid4())
             await self.send_inline_query_result(update, result_id, message_content=self.budget_limit_message)
 
-    @admin_restricted
+    @moder_restricted
     async def moder_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         moder = update.effective_user
         query = update.callback_query
@@ -1174,28 +1195,35 @@ class ChatGPTTelegramBot:
 
         match action:
             case "Approve":
-                print("Approve Action")
                 action_text = 'approved'
-                print(action_text)
                 self.user_ids = user
                 context.bot_data['users'].add(user)
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text="✅ Теперь Вы можете пользоваться ботом!",
+                    disable_web_page_preview=True
+                )
             case "Deny":
-                print("Deny Action")
-                action_text = 'banned'
-                print(action_text)
+                action_text = 'denied'
                 self.banned_ids = user
                 context.bot_data['banned'].add(user)
                 await context.bot.send_message(
                     chat_id=user.id,
-                    text="Админ послал тебя на три буквы, не пиши сюда больше",
+                    text="⛔ Извините, Вам запрещено использовать данного бота",
                     disable_web_page_preview=True
                 )
-            case "Ban":
-                print("Ban Action")
-                return
             case "Unban":
                 print("Unban Action")
-                return
+                action_text = 'unbanned'
+                context.bot_data['banned'].discard(user)
+                self.__banned_ids.discard(user.id)
+                self.user_ids = user
+                context.bot_data['users'].add(user)
+                await context.bot.send_message(
+                    chat_id=user.id,
+                    text="✅ Теперь Вы можете пользоваться ботом!",
+                    disable_web_page_preview=True
+                )
             case _:
                 print("Default Action")
                 return
@@ -1224,6 +1252,7 @@ class ChatGPTTelegramBot:
         """
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
+
         bot_user = await application.bot.get_me()
         log_str = ""
 
@@ -1231,19 +1260,22 @@ class ChatGPTTelegramBot:
             self.channel = await application.bot.get_chat(self.chat_id)
             log_str = f" with @{self.channel.username} subscription check"
 
-        logging.info(f'Initializing @{bot_user.username}{log_str}...')
-
-        user_budgets = self.config['user_budgets'].split(',')
-        if len(user_budgets) == 1:
-            logging.warning(f"Only one value for budgets is set, this value ({user_budgets}) will be used as "
-                            f"{self.config['budget_period']} budget for every regular bot user")
+        budget_period = self.config['budget'].get('period')
+        for user_type, value in self.config['budget'].items():
+            if user_type != 'period':
+                logging.info(f"{user_type.capitalize()} {budget_period} budget is set to {value} $")
 
         application.bot_data.setdefault('admins', set())
         application.bot_data.setdefault('moders', set())
         application.bot_data.setdefault('users', set())
+        application.bot_data.setdefault('banned', set())
         application.bot_data['mod_msgs'] = {}
         for user in application.bot_data['users']:
             self.user_ids = user
+        for user in application.bot_data['banned']:
+            self.banned_ids = user
+
+        logging.info(f'Initializing @{bot_user.username}{log_str}...')
 
     async def post_stop(self, application: Application) -> None:
         """
@@ -1260,54 +1292,39 @@ class ChatGPTTelegramBot:
                 await application.bot.delete_messages(chat_id, [msg.id for msg in msgs])
         del application.bot_data['mod_msgs']
 
+    @check_budget
+    async def echo(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """Echo the user message."""
+        await update.message.reply_text(f"echo: {update.message.text}")
+
+    @check_permission
     async def _update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Check user"""
-        if not self.chat_id:
-            pass
-
-        if not update.effective_user:
-            raise ApplicationHandlerStop
-
+        """
+        Ask bot moderators fow actions on new users
+        """
         user = update.effective_user
+        if user not in context.bot_data.values():
+            user_msg = "⚠️Дождитесь разрешения модератора"
 
-        if user.id in self.admin_ids and user not in context.bot_data['admins']:
-            context.bot_data['admins'].add(user)
-            return
-        if user.id in self.moder_ids and user not in context.bot_data['moders']:
-            context.bot_data['moders'].add(user)
-            return
-        if user.id in self.user_ids and user not in context.bot_data['users']:
-            context.bot_data['users'].add(user)
-            return
-        if user.id not in self.all_ids:
-            await update.effective_message.reply_text(
-                message_thread_id=get_thread_id(update),
-                text="Дождитесь разрешения модератора",  # TODO: localize
-                disable_web_page_preview=True
-            )
             key = str(uuid4())  # Generate ID and separate value from command
             context.bot_data[key] = user  # Store user in bot_data
-
-            keyboard = [
-                [InlineKeyboardButton("Approve", callback_data=f"Approve {key}")],
-                [InlineKeyboardButton("Deny", callback_data=f"Deny {key}")]
-            ]
-
-            reply_markup = InlineKeyboardMarkup(keyboard)
 
             for moder in self.moder_ids:
                 try:
                     mod_msg = await context.bot.send_message(
                         chat_id=moder,
-                        reply_markup=reply_markup,
-                        parse_mode="HTML",
+                        reply_markup=await moder_approve_keyboard(key),
+                        parse_mode=constants.ParseMode.HTML,
                         text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
                     )
                     context.bot_data['mod_msgs'].setdefault(key, {}).setdefault(moder, []).append(mod_msg)
                 except:
                     continue
+        else:
+            user_msg = "⚠️Ждем решения модератора..."
 
-            raise ApplicationHandlerStop
+        await self._send_message(update, context, msg=user_msg)
+        raise ApplicationHandlerStop
 
     def run(self):
         """
@@ -1315,7 +1332,7 @@ class ChatGPTTelegramBot:
         """
         pathlib.Path("data").mkdir(exist_ok=True)
         persistence = PicklePersistence(
-            filepath="data/mia_rs_chat_bot_data"
+            filepath=self.config['persistence_file']
         )
 
         application = (
@@ -1338,8 +1355,11 @@ class ChatGPTTelegramBot:
         application.add_handler(CommandHandler('start', self.help))
         application.add_handler(CommandHandler('stats', self.stats))
         application.add_handler(CommandHandler('resend', self.resend))
+        # application.add_handler(CommandHandler(
+        #     'chat', self.prompt, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP)
+        # )
         application.add_handler(CommandHandler(
-            'chat', self.prompt, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP)
+            'chat', self.echo, filters=filters.ChatType.GROUP | filters.ChatType.SUPERGROUP)
         )
         application.add_handler(MessageHandler(
             filters.PHOTO | filters.Document.IMAGE,
@@ -1348,7 +1368,8 @@ class ChatGPTTelegramBot:
             filters.AUDIO | filters.VOICE | filters.Document.AUDIO |
             filters.VIDEO | filters.VIDEO_NOTE | filters.Document.VIDEO,
             self.transcribe))
-        application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self.prompt))
+        # application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self.prompt))
+        application.add_handler(MessageHandler(filters.TEXT & (~filters.COMMAND), self.echo))
         application.add_handler(InlineQueryHandler(self.inline_query, chat_types=[
             constants.ChatType.GROUP, constants.ChatType.SUPERGROUP, constants.ChatType.PRIVATE
         ]))

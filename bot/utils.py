@@ -1,4 +1,5 @@
 from __future__ import annotations
+from typing import TYPE_CHECKING
 
 import asyncio
 import itertools
@@ -7,8 +8,9 @@ import logging
 import os
 import base64
 
-import telegram
-from telegram import Message, MessageEntity, Update, ChatMember, constants
+if TYPE_CHECKING:
+    from telegram_bot import TelegramBot
+from telegram import Message, MessageEntity, Update, ChatMember, constants, User
 from telegram.ext import CallbackContext, ContextTypes
 
 from usage_tracker import UsageTracker
@@ -257,6 +259,59 @@ def get_remaining_budget(config, usage, update: Update, is_inline=False) -> floa
     budget_period = config['budget_period']
     if user_budget is not None:
         cost = usage[user_id].get_current_cost()[budget_cost_map[budget_period]]
+        return user_budget - cost
+
+    # Get budget for guests
+    if 'guests' not in usage:
+        usage['guests'] = UsageTracker('guests', 'all guest users in group chats')
+    cost = usage['guests'].get_current_cost()[budget_cost_map[budget_period]]
+    return config['guest_budget'] - cost
+
+
+def get_user_budget_new(bot: TelegramBot, user_id: User.id) -> float | None:
+    """
+    Get the user's budget based on their user ID and the bot configuration.
+    :param bot: The telegram bot object
+    :param user_id: Telegram User ID
+    :return: The user's budget as a float, or None if the user is not allowed to use the Bot
+    """
+    match user_id:
+        case _ if user_id in bot.admin_ids:
+            return bot.config['budget']['admin']
+        case _ if user_id in bot.moder_ids:
+            return bot.config['budget']['moder']
+        case _ if user_id in bot.user_ids:
+            return bot.config['budget']['user']
+        case _:
+            return None
+
+
+def get_remaining_budget_new(bot: TelegramBot, update: Update, is_inline=False) -> float:
+    """
+    Calculate the remaining budget for a user based on their current usage.
+    :param bot: The telegram bot object
+    :param usage: The usage tracker object
+    :param update: Telegram update object
+    :param is_inline: Boolean flag for inline queries
+    :return: The remaining budget for the user as a float
+    """
+    # Mapping of budget period to cost period
+    budget_cost_map = {
+        "monthly": "cost_month",
+        "daily": "cost_today",
+        "all-time": "cost_all_time"
+    }
+
+    user = update.inline_query.from_user if is_inline else update.effective_user
+    name = user.name
+    if user.id not in bot.usage:
+        bot.usage[user.id] = UsageTracker(user.id, name)
+
+    # Get budget for users
+    user_budget = get_user_budget_new(bot, user.id)
+    budget_period = bot.config['budget']['period']
+    if user_budget is not None:
+        cost = bot.usage[user.id].get_current_cost()[budget_cost_map[budget_period]]
         return user_budget - cost
 
     # Get budget for guests
