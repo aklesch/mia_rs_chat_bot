@@ -10,6 +10,32 @@ from utils import (
 )
 
 
+def check_permissions(func):
+    """
+    Check user permission to use bot
+    """
+    @functools.wraps(func)
+    async def wrapped(self, update, context, *args, **kwargs):
+        user = update.effective_user
+
+        match user:
+            case _ if not user or user.is_bot or user.id in self.banned_ids:
+                raise ApplicationHandlerStop
+            case _ if user.id in self.all_ids:
+                if user.id in self.admin_ids:
+                    context.bot_data['admins'].add(user)
+                if user.id in self.moder_ids:
+                    context.bot_data['moders'].add(user)
+                if user.id in self.user_ids:
+                    context.bot_data['users'].add(user)
+                return None
+            case _:
+                logging.info(f"New user {user.name} is trying to access the bot")
+                return await func(self, update, context, *args, **kwargs)
+
+    return wrapped
+
+
 def admin_restricted(func):
     """
     Decorator for handlers allowing only admin access.

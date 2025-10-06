@@ -9,11 +9,13 @@ with open(translations_file_path, 'r', encoding='utf-8') as f:
     translations = json.load(f)
 
 
-def localized_text(key, bot_language):
+def localized_text(key, bot_language=None) -> str:
     """
     Return translated text for a key in specified bot_language.
     Keys and translations can be found in the translations.json.
     """
+    if bot_language is None:
+        bot_language = 'ru'
     try:
         return translations[bot_language][key]
     except KeyError:

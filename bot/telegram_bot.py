@@ -9,6 +9,7 @@ import re
 
 from decorators import *
 from i18n import localized_text
+from inline_keyboards import *
 from openai_helper import OpenAIHelper
 from PIL import Image
 from pydub import AudioSegment
@@ -62,7 +63,7 @@ from uuid import uuid4
 uuid_pattern = "[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
 audio_preview_dir = 'bot/previews'
 VOICES = [os.path.splitext(filename)[0] for filename in os.listdir(audio_preview_dir)]
-MODER_ACTIONS = ["Approve", "Deny", "Ban", "Unbun"]
+MODER_ACTIONS = ["Approve", "Deny", "Ban", "Unban"]
 # admin_action_pattern = f"^(Approve|Deny|Ban|Unban) ({uuid_pattern}|[0-9]+)$"
 moder_action_pattern = f"^({'|'.join(MODER_ACTIONS)}) ({uuid_pattern}|[0-9]+)$"
 
@@ -107,6 +108,7 @@ class ChatGPTTelegramBot:
         self.__admin_ids: set = config['admin_ids']
         self.__moder_ids: set = config['moder_ids']
         self.__user_ids: set = config['user_ids']
+        self.__banned_ids: set = config['banned_ids']
 
     @property
     def all_ids(self) -> set[int]:
@@ -115,7 +117,7 @@ class ChatGPTTelegramBot:
         :return: set[int]
         """
         # return self.__admin_ids | self.__user_ids
-        return self.admin_ids | self.user_ids | self.moder_ids
+        return self.admin_ids | self.moder_ids | self.user_ids
 
     @property
     def admin_ids(self) -> set[int]:
@@ -164,6 +166,22 @@ class ChatGPTTelegramBot:
         :param user: telegram._user
         """
         self.__user_ids.add(user.id)
+
+    @property
+    def banned_ids(self) -> set[User.id]:
+        """
+        Returns set of bot banned or denied user IDs.
+        :return: set[User.id]
+        """
+        return self.__banned_ids
+
+    @banned_ids.setter
+    def banned_ids(self, user: User) -> None:
+        """
+        Adds user to the set of bot banned or denied user IDs.
+        :param user: User
+        """
+        self.__banned_ids.add(user.id)
 
     def del_user_id(self, user: User, context: ContextTypes.DEFAULT_TYPE) -> None:
         context.bot_data['users'].discard(user)
@@ -1121,6 +1139,10 @@ class ChatGPTTelegramBot:
         """
         Sends message to the user.
         """
+        if msg is None:
+            # msg = f"⛔ Вам запрещено использовать данного бота"
+            msg = localized_text("disallowed", self.bot_language)
+
         if not is_inline:
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
@@ -1159,7 +1181,7 @@ class ChatGPTTelegramBot:
             result_id = str(uuid4())
             await self.send_inline_query_result(update, result_id, message_content=self.budget_limit_message)
 
-    @admin_restricted
+    @moder_restricted
     async def moder_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         moder = update.effective_user
         query = update.callback_query
@@ -1169,39 +1191,37 @@ class ChatGPTTelegramBot:
 
         await query.answer()
 
-        if key is not None and query.message in context.bot_data['mod_msgs'][key][moder.id]:
-            context.bot_data['mod_msgs'][key][moder.id].remove(query.message)
+        if key is not None and query.message in context.bot_data['service_msgs'][key][moder.id]:
+            context.bot_data['service_msgs'][key][moder.id].remove(query.message)
 
         match action:
             case "Approve":
-                print("Approve Action")
                 action_text = 'approved'
-                print(action_text)
                 self.user_ids = user
                 context.bot_data['users'].add(user)
             case "Deny":
-                print("Deny Action")
                 action_text = 'banned'
-                print(action_text)
                 self.banned_ids = user
                 context.bot_data['banned'].add(user)
                 await context.bot.send_message(
                     chat_id=user.id,
-                    text="Админ послал тебя на три буквы, не пиши сюда больше",
+                    # text="Админ послал тебя на три буквы, не пиши сюда больше",
+                    text=localized_text("user_was_denied", self.bot_language),
                     disable_web_page_preview=True
                 )
-            case "Ban":
-                print("Ban Action")
-                return
-            case "Unban":
-                print("Unban Action")
-                return
+            # case "Ban":
+            #     print("Ban Action")
+            #     return
+            # case "Unban":
+            #     print("Unban Action")
+            #     return
             case _:
-                print("Default Action")
+                # print("Default Action")
                 return
 
         await query.edit_message_text(
-            text=f"User {user.mention_html()} was {action_text}!",
+            # text=f"User {user.mention_html()} was {action_text}!",
+            text=localized_text("user_status", self.bot_language),
             reply_markup=None,
             parse_mode="HTML"
         )
@@ -1225,25 +1245,28 @@ class ChatGPTTelegramBot:
         await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
         await application.bot.set_my_commands(self.commands)
         bot_user = await application.bot.get_me()
-        log_str = ""
+        log_str = f"Initializing @{bot_user.username}"
 
         if self.chat_id:
             self.channel = await application.bot.get_chat(self.chat_id)
             log_str = f" with @{self.channel.username} subscription check"
 
-        logging.info(f'Initializing @{bot_user.username}{log_str}...')
-
-        user_budgets = self.config['user_budgets'].split(',')
-        if len(user_budgets) == 1:
-            logging.warning(f"Only one value for budgets is set, this value ({user_budgets}) will be used as "
-                            f"{self.config['budget_period']} budget for every regular bot user")
+        budget_period = self.config['budget_period']
+        for user_type, value in self.config['budget'].items():
+            log_str += f"\n\t{user_type.capitalize()} {budget_period} budget is set to {value} $"
 
         application.bot_data.setdefault('admins', set())
         application.bot_data.setdefault('moders', set())
         application.bot_data.setdefault('users', set())
-        application.bot_data['mod_msgs'] = {}
+        application.bot_data.setdefault('banned', set())
+        application.bot_data['service_msgs'] = {}
+        application.bot_data["waitlist"] = {}
         for user in application.bot_data['users']:
             self.user_ids = user
+        for user in application.bot_data['banned']:
+            self.banned_ids = user
+        
+        logging.info(f"{log_str}...")
 
     async def post_stop(self, application: Application) -> None:
         """
@@ -1309,6 +1332,40 @@ class ChatGPTTelegramBot:
 
             raise ApplicationHandlerStop
 
+    @check_permissions
+    async def check_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        """
+        Ask bot moderators fow actions on new users
+        """
+        user = update.effective_user
+        if user not in context.bot_data["waitlist"].values():
+            # user_msg = "⚠️Дождитесь разрешения модератора"
+            user_msg = localized_text("wait_for_approve", self.bot_language)
+
+            key = str(uuid4())  # Generate ID and separate value from command
+            context.bot_data["waitlist"][key] = user  # Store user in bot_data
+
+            for moder in self.moder_ids:
+                try:
+                    msg = await context.bot.send_message(
+                        chat_id=moder,
+                        reply_markup=await moder_action_keyboard(key, self.bot_language),
+                        parse_mode=constants.ParseMode.HTML,
+                        # text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
+                        text=f"{localized_text('new_user', self.bot_language)[0]}"
+                             f"{user.mention_html()}!"
+                             f"{localized_text('new_user', self.bot_language)[1]}"
+                    )
+                    context.bot_data["service_msgs"].setdefault(key, {}).setdefault(moder, []).append(msg)
+                except:
+                    continue
+        else:
+            # user_msg = "⚠️Ждем решения модератора..."
+            user_msg = localized_text("waiting_moderator", self.bot_language)
+
+        await self._send_message(update, context, msg=user_msg)
+        raise ApplicationHandlerStop
+
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C
@@ -1330,7 +1387,9 @@ class ChatGPTTelegramBot:
             .build()
         )
 
-        application.add_handler(TypeHandler(Update, callback=self._update), group=-1)
+        application.add_handler(TypeHandler(Update, callback=self.check_user), group=-2)
+        application.add_handler(TypeHandler(Update, callback=self.check_budget), group=-1)
+        # application.add_handler(TypeHandler(Update, callback=self._update), group=-1)
         application.add_handler(CommandHandler('reset', self.reset))
         application.add_handler(CommandHandler('help', self.help))
         application.add_handler(CommandHandler('image', self.image))
