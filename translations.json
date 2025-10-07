@@ -7,7 +7,15 @@
     "wait_for_approve": "⚠ Please wait for moderator approve",
     "waiting_moderator": "⚠ Still waiting for moderator's decision...",
     "user_was_denied": "⛔ Moderator declined your request",
-    "user_status": "",
+    "user_status": [
+      "User",
+      "was"
+    ],
+    "user_status_full": [
+      "User",
+      "was",
+      "moderator"
+    ],
     "moder_kb_approve": "Approve",
     "moder_kb_deny": "Deny",
     "help_description": "Show help message",
@@ -836,7 +844,15 @@
     "wait_for_approve": "⚠ Пожалуйста, дождитесь аппрува модератора",
     "waiting_moderator": "⚠ Ждем решение модератора...",
     "user_was_denied": "⛔ Модератор отклонил Вашу заявку!",
-    "user_status": "",
+    "user_status": [
+      "Пользователь",
+      "был"
+    ],
+    "user_status_full": [
+      "Пользователь",
+      "был",
+      "модератором"
+    ],
     "moder_kb_approve": "Разрешить",
     "moder_kb_deny": "Запретить",
     "help_description": "Показать справочное сообщение",

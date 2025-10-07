@@ -2,6 +2,8 @@ version: '3'
 services:
   mia_rs_chat_bot:
     build:
+      args:
+        PYTHON_VERSION: ${PYTHON_VERSION:-3.13}
       context: .
       dockerfile: Dockerfile
     volumes:

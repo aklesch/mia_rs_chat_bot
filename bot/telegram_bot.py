@@ -1135,13 +1135,13 @@ class ChatGPTTelegramBot:
         return True
 
     async def _send_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
-                            msg: str, is_inline: bool = False, parse_mode: constants.ParseMode = None) -> None:
+                            msg: str | None = None, is_inline: bool = False, parse_mode: constants.ParseMode = None) -> None:
         """
         Sends message to the user.
         """
         if msg is None:
             # msg = f"⛔ Вам запрещено использовать данного бота"
-            msg = localized_text("disallowed", self.bot_language)
+            msg = self.disallowed_message
 
         if not is_inline:
             await update.effective_message.reply_text(
@@ -1194,6 +1194,7 @@ class ChatGPTTelegramBot:
         if key is not None and query.message in context.bot_data['service_msgs'][key][moder.id]:
             context.bot_data['service_msgs'][key][moder.id].remove(query.message)
 
+        action_text = 'ignored'
         match action:
             case "Approve":
                 action_text = 'approved'
@@ -1221,7 +1222,10 @@ class ChatGPTTelegramBot:
 
         await query.edit_message_text(
             # text=f"User {user.mention_html()} was {action_text}!",
-            text=localized_text("user_status", self.bot_language),
+            text=f"{localized_text('user_status', self.bot_language)[0]}"
+                 f"{user.mention_html()}"
+                 f"{localized_text('user_status', self.bot_language)[1]}"
+                 f"{action_text}",
             reply_markup=None,
             parse_mode="HTML"
         )
@@ -1229,7 +1233,13 @@ class ChatGPTTelegramBot:
         for chat_id in context.bot_data['mod_msgs'][key].values():
             for msg in chat_id:
                 await msg.edit_text(
-                    text=f"User {user.mention_html()} was {action_text} by {moder.mention_html()}!",
+                    # text=f"User {user.mention_html()} was {action_text} by {moder.mention_html()}!",
+                    text=f"{localized_text('user_status_full', self.bot_language)[0]}"
+                         f"{user.mention_html()}"
+                         f"{localized_text('user_status_full', self.bot_language)[1]}"
+                         f"{action_text}"
+                         f"{localized_text('user_status_full', self.bot_language)[2]}"
+                         f"{moder.mention_html()}",
                     reply_markup=None,
                     parse_mode="HTML"
                 )

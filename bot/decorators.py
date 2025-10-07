@@ -1,6 +1,7 @@
 import logging
 
 import functools
+from telegram.ext import ApplicationHandlerStop
 from usage_tracker import UsageTracker
 from utils import (
     get_thread_id,
@@ -8,6 +9,13 @@ from utils import (
     is_user_in_group,
     get_remaining_budget,
 )
+
+
+COST_MAP = {
+    "monthly": "cost_month",
+    "daily": "cost_today",
+    "all-time": "cost_all_time"
+}
 
 
 def check_permissions(func):
@@ -107,6 +115,45 @@ def send_action(action):
         return command_func
 
     return decorator
+
+
+def budget_check(func):
+    """
+    Check user remaining budget for period
+    """
+    @functools.wraps(func)
+    async def wrapped(self, update, context, *args, **kwargs):
+        user = update.effective_user
+        if not user:
+            raise ApplicationHandlerStop
+
+        usage: UsageTracker = self.usage.setdefault(user.id, UsageTracker(user.id, user.name))
+
+        budget_period = COST_MAP[self.config['budget_period']]
+
+        user_budget = 0
+        match user.id:
+            case _ if user.id in self.admin_ids:
+                user_budget = self.config['budget']['admin']
+            case _ if user.id in self.moder_ids:
+                user_budget = self.config['budget']['moder']
+            case _ if user.id in self.user_ids:
+                user_budget = self.config['budget']['user']
+            case _:
+                user_budget = 0
+
+        cost = usage.get_current_cost()[budget_period]
+        # rem = user_budget - cost
+
+        if user_budget > cost:
+            return await func(self, update, context, *args, **kwargs)
+
+        logging.warning(f'User {user.name} (id: {user.id}) reached their usage limit')
+        msg = self.budget_limit_message
+        await self._send_message(update, context, msg)
+        raise ApplicationHandlerStop
+
+    return wrapped
 
 
 def budget(func):
