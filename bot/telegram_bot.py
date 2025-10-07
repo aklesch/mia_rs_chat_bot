@@ -67,6 +67,7 @@ MODER_ACTIONS = ["Approve", "Deny", "Ban", "Unban"]
 # admin_action_pattern = f"^(Approve|Deny|Ban|Unban) ({uuid_pattern}|[0-9]+)$"
 moder_action_pattern = f"^({'|'.join(MODER_ACTIONS)}) ({uuid_pattern}|[0-9]+)$"
 
+
 class ChatGPTTelegramBot:
     """
     Class representing a ChatGPT Telegram Bot.
@@ -90,10 +91,12 @@ class ChatGPTTelegramBot:
         ]
         # If imaging is enabled, add the "image" command to the list
         if self.config.get('enable_image_generation', False):
-            self.commands.append(BotCommand(command='image', description=localized_text('image_description', self.bot_language)))
+            self.commands.append(
+                BotCommand(command='image', description=localized_text('image_description', self.bot_language)))
 
         if self.config.get('enable_tts_generation', False):
-            self.commands.append(BotCommand(command='tts', description=localized_text('tts_description', self.bot_language)))
+            self.commands.append(
+                BotCommand(command='tts', description=localized_text('tts_description', self.bot_language)))
 
         self.group_commands = [BotCommand(
             command='chat', description=localized_text('chat_description', self.bot_language)
@@ -236,14 +239,14 @@ class ChatGPTTelegramBot:
         chat_id = update.effective_chat.id
         chat_messages, chat_token_length = self.openai.get_conversation_stats(chat_id)
         remaining_budget = get_remaining_budget(self.config, self.usage, update)
-        
+
         text_current_conversation = (
             f"*{localized_text('stats_conversation', self.bot_language)[0]}*:\n"
             f"{chat_messages} {localized_text('stats_conversation', self.bot_language)[1]}\n"
             f"{chat_token_length} {localized_text('stats_conversation', self.bot_language)[2]}\n"
             "----------------------------\n"
         )
-        
+
         # Check if image generation is enabled and, if so, generate the image statistics for today
         text_today_images = ""
         if self.config.get('enable_image_generation', False):
@@ -256,7 +259,7 @@ class ChatGPTTelegramBot:
         text_today_tts = ""
         if self.config.get('enable_tts_generation', False):
             text_today_tts = f"{characters_today} {localized_text('stats_tts', self.bot_language)}\n"
-        
+
         text_today = (
             f"*{localized_text('usage_today', self.bot_language)}:*\n"
             f"{tokens_today} {localized_text('stats_tokens', self.bot_language)}\n"
@@ -268,7 +271,7 @@ class ChatGPTTelegramBot:
             f"{localized_text('stats_total', self.bot_language)}{current_cost['cost_today']:.2f}\n"
             "----------------------------\n"
         )
-        
+
         text_month_images = ""
         if self.config.get('enable_image_generation', False):
             text_month_images = f"{images_month} {localized_text('stats_images', self.bot_language)}\n"
@@ -280,7 +283,7 @@ class ChatGPTTelegramBot:
         text_month_tts = ""
         if self.config.get('enable_tts_generation', False):
             text_month_tts = f"{characters_month} {localized_text('stats_tts', self.bot_language)}\n"
-        
+
         # Check if image generation is enabled and, if so, generate the image statistics for the month
         text_month = (
             f"*{localized_text('usage_month', self.bot_language)}:*\n"
@@ -374,7 +377,6 @@ class ChatGPTTelegramBot:
         logging.info(f'New image generation request received from user {update.message.from_user.name} '
                      f'(id: {update.message.from_user.id})')
 
-
         await self._generate_image(update, context, image_query)
 
     @send_action(constants.ChatAction.UPLOAD_PHOTO)
@@ -392,7 +394,8 @@ class ChatGPTTelegramBot:
                     document=image_url
                 )
             else:
-                raise Exception(f"env variable IMAGE_RECEIVE_MODE has invalid value {self.config['image_receive_mode']}")
+                raise Exception(
+                    f"env variable IMAGE_RECEIVE_MODE has invalid value {self.config['image_receive_mode']}")
             # add image request to users usage tracker
             user_id = update.message.from_user.id
             self.usage[user_id].add_image_request(image_size, self.config['image_prices'])
@@ -591,7 +594,7 @@ class ChatGPTTelegramBot:
             else:
                 trigger_keyword = self.config['group_trigger_keyword']
                 if (prompt is None and trigger_keyword != '') or \
-                   (prompt is not None and not prompt.lower().startswith(trigger_keyword.lower())):
+                        (prompt is not None and not prompt.lower().startswith(trigger_keyword.lower())):
                     logging.info('Vision coming from group chat with wrong keyword, ignoring...')
                     return
 
@@ -1135,7 +1138,8 @@ class ChatGPTTelegramBot:
         return True
 
     async def _send_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
-                            msg: str | None = None, is_inline: bool = False, parse_mode: constants.ParseMode = None) -> None:
+                            msg: str | None = None, is_inline: bool = False,
+                            parse_mode: constants.ParseMode = None) -> None:
         """
         Sends message to the user.
         """
@@ -1188,6 +1192,7 @@ class ChatGPTTelegramBot:
         action = query.data.split()[0]
         key = query.data.split()[-1]
         user = context.bot_data.get(key)
+        user = {v: k for k, v in context.bot_data['waitlist']}.get(key)
 
         await query.answer()
 
@@ -1275,7 +1280,7 @@ class ChatGPTTelegramBot:
             self.user_ids = user
         for user in application.bot_data['banned']:
             self.banned_ids = user
-        
+
         logging.info(f"{log_str}...")
 
     async def post_stop(self, application: Application) -> None:
@@ -1284,14 +1289,17 @@ class ChatGPTTelegramBot:
         Removes all unused keys from persistence by uuid_v4 pattern
         Deletes all admin action messages from their chats and clears messages persistence
         """
-        pattern = re.compile(uuid_pattern)
-        [application.bot_data.pop(key, None) for key in list(application.bot_data) if pattern.match(key)]
-        for key in application.bot_data['mod_msgs']:
-            for chat_id, msgs in application.bot_data['mod_msgs'][key].items():
+        # pattern = re.compile(uuid_pattern)
+        # [application.bot_data.pop(key, None) for key in list(application.bot_data) if pattern.match(key)]
+        # [application.bot_data["waitlist"].pop(key, None) for key in list(application.bot_data["waitlist"]) if
+        #  pattern.match(key)]
+        for key in application.bot_data['service_msgs']:
+            for moder_chat_id, msgs in application.bot_data['service_msgs'][key].items():
                 if not msgs:
                     continue
-                await application.bot.delete_messages(chat_id, [msg.id for msg in msgs])
-        del application.bot_data['mod_msgs']
+                await application.bot.delete_messages(moder_chat_id, [msg.id for msg in msgs])
+        del application.bot_data['service_msgs']
+        del application.bot_data['waitlist']
 
     async def _update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """Check user"""
@@ -1348,12 +1356,12 @@ class ChatGPTTelegramBot:
         Ask bot moderators fow actions on new users
         """
         user = update.effective_user
-        if user not in context.bot_data["waitlist"].values():
+        if user not in context.bot_data["waitlist"]:
             # user_msg = "⚠️Дождитесь разрешения модератора"
             user_msg = localized_text("wait_for_approve", self.bot_language)
 
             key = str(uuid4())  # Generate ID and separate value from command
-            context.bot_data["waitlist"][key] = user  # Store user in bot_data
+            context.bot_data["waitlist"][user] = key  # Store user and key in bot_data
 
             for moder in self.moder_ids:
                 try:
@@ -1362,8 +1370,8 @@ class ChatGPTTelegramBot:
                         reply_markup=await moder_action_keyboard(key, self.bot_language),
                         parse_mode=constants.ParseMode.HTML,
                         # text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
-                        text=f"{localized_text('new_user', self.bot_language)[0]}"
-                             f"{user.mention_html()}!"
+                        text=f"{localized_text('new_user', self.bot_language)[0]} "
+                             f"{user.mention_html()}! "
                              f"{localized_text('new_user', self.bot_language)[1]}"
                     )
                     context.bot_data["service_msgs"].setdefault(key, {}).setdefault(moder, []).append(msg)
@@ -1376,13 +1384,20 @@ class ChatGPTTelegramBot:
         await self._send_message(update, context, msg=user_msg)
         raise ApplicationHandlerStop
 
+    @budget_check
+    async def check_budget(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+        msg = self.budget_limit_message
+        await self._send_message(update, context, msg)
+        raise ApplicationHandlerStop
+
     def run(self):
         """
         Runs the bot indefinitely until the user presses Ctrl+C
         """
         pathlib.Path("data").mkdir(exist_ok=True)
         persistence = PicklePersistence(
-            filepath="data/mia_rs_chat_bot_data"
+            filepath=self.config['persistence_file']
+            # filepath="data/mia_rs_chat_bot_data"
         )
 
         application = (

@@ -100,6 +100,7 @@ telegram_config = {
     'admin_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_ADMIN_USER_IDS')),
     'moder_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_MODER_USER_IDS')),
     'user_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_ALLOWED_USER_IDS')),
+    'banned_ids': create_user_ids_set(os.environ.get('TELEGRAM_BOT_BANNED_USER_IDS')),
     'telegram_channel_id': os.environ.get('TELEGRAM_CHANNEL_ID'),
     'enable_quoting': os.environ.get('ENABLE_QUOTING', 'true').lower() == 'true',
     'enable_image_generation': os.environ.get('ENABLE_IMAGE_GENERATION', 'true').lower() == 'true',
@@ -132,6 +133,7 @@ telegram_config = {
     'bot_language': os.environ.get('BOT_LANGUAGE', 'en'),
     'force_language': os.environ.get('FORCE_LANGUAGE', 'false').lower() == 'true',
     'show_usage': os.environ.get('SHOW_USAGE', 'false').lower() == 'true',
+    'persistence_file': os.environ.get('PICKLE_PERSISTENCE_FILE', "data/pickle_persistence_file"),
 }
 
 plugin_config = {
