@@ -1191,22 +1191,22 @@ class ChatGPTTelegramBot:
         query = update.callback_query
         action = query.data.split()[0]
         key = query.data.split()[-1]
-        user = context.bot_data.get(key)
-        user = {v: k for k, v in context.bot_data['waitlist']}.get(key)
+        # user = context.bot_data.get(key)
+        user = {v: k for k, v in context.bot_data['waitlist'].items()}.get(key)
 
         await query.answer()
 
-        if key is not None and query.message in context.bot_data['service_msgs'][key][moder.id]:
-            context.bot_data['service_msgs'][key][moder.id].remove(query.message)
+        # if key is not None and query.message == context.bot_data['service_msgs'][key][moder.id]:
+        #     del context.bot_data['service_msgs'][key][moder.id]
 
         action_text = 'ignored'
         match action:
             case "Approve":
-                action_text = 'approved'
+                action_text = 'user_approved'
                 self.user_ids = user
                 context.bot_data['users'].add(user)
             case "Deny":
-                action_text = 'banned'
+                action_text = 'user_denied'
                 self.banned_ids = user
                 context.bot_data['banned'].add(user)
                 await context.bot.send_message(
@@ -1225,33 +1225,55 @@ class ChatGPTTelegramBot:
                 # print("Default Action")
                 return
 
-        await query.edit_message_text(
-            # text=f"User {user.mention_html()} was {action_text}!",
-            text=f"{localized_text('user_status', self.bot_language)[0]}"
-                 f"{user.mention_html()}"
-                 f"{localized_text('user_status', self.bot_language)[1]}"
-                 f"{action_text}",
-            reply_markup=None,
-            parse_mode="HTML"
-        )
+        # await query.edit_message_text(
+        #     # text=f"User {user.mention_html()} was {action_text}!",
+        #     text=f"{localized_text('user_status', self.bot_language)[0]}"
+        #          f"{user.mention_html()}"
+        #          f"{localized_text('user_status', self.bot_language)[1]}"
+        #          f"{action_text}",
+        #     reply_markup=None,
+        #     parse_mode="HTML"
+        # )
 
-        for chat_id in context.bot_data['mod_msgs'][key].values():
-            for msg in chat_id:
+        for moder_id in list(context.bot_data['service_msgs'][key].keys()):
+            if moder_id == moder.id:
+                new_text = f"{localized_text('user_status', self.bot_language)[0]} "\
+                           f"{user.mention_html()} "\
+                           f"{localized_text('user_status', self.bot_language)[1]} "\
+                           f"{localized_text(action_text, self.bot_language)}!"
+            else:
+                new_text = f"{localized_text('user_status_full', self.bot_language)[0]} "\
+                           f"{user.mention_html()} "\
+                           f"{localized_text('user_status_full', self.bot_language)[1]} "\
+                           f"{localized_text(action_text, self.bot_language)} "\
+                           f"{localized_text('user_status_full', self.bot_language)[2]} "\
+                           f"{moder.mention_html()}!"
+            msg = context.bot_data['service_msgs'][key].pop(moder_id, None)
+            if msg:
                 await msg.edit_text(
                     # text=f"User {user.mention_html()} was {action_text} by {moder.mention_html()}!",
-                    text=f"{localized_text('user_status_full', self.bot_language)[0]}"
-                         f"{user.mention_html()}"
-                         f"{localized_text('user_status_full', self.bot_language)[1]}"
-                         f"{action_text}"
-                         f"{localized_text('user_status_full', self.bot_language)[2]}"
-                         f"{moder.mention_html()}",
+                    text=new_text,
                     reply_markup=None,
                     parse_mode="HTML"
                 )
-                chat_id.remove(msg)
 
-        logging.info(f"User {user.id} was {action_text} by moderator {moder.id}")
-        del context.bot_data[key]
+        # for moder_id, msg in context.bot_data['service_msgs'][key].items():
+        #     await msg.edit_text(
+        #         # text=f"User {user.mention_html()} was {action_text} by {moder.mention_html()}!",
+        #         text=f"{localized_text('user_status_full', self.bot_language)[0]}"
+        #              f"{user.mention_html()}"
+        #              f"{localized_text('user_status_full', self.bot_language)[1]}"
+        #              f"{action_text}"
+        #              f"{localized_text('user_status_full', self.bot_language)[2]}"
+        #              f"{moder.mention_html()}",
+        #         reply_markup=None,
+        #         parse_mode="HTML"
+        #     )
+        #     chat_id.remove(msg)
+
+        logging.info(f"User {user.id} was {localized_text(action_text, 'en')} by moderator {moder.id}")
+        del context.bot_data["service_msgs"][key]
+        del context.bot_data["waitlist"][user]
 
     async def post_init(self, application: Application) -> None:
         """
@@ -1294,10 +1316,10 @@ class ChatGPTTelegramBot:
         # [application.bot_data["waitlist"].pop(key, None) for key in list(application.bot_data["waitlist"]) if
         #  pattern.match(key)]
         for key in application.bot_data['service_msgs']:
-            for moder_chat_id, msgs in application.bot_data['service_msgs'][key].items():
-                if not msgs:
-                    continue
-                await application.bot.delete_messages(moder_chat_id, [msg.id for msg in msgs])
+            for moder_id, msg in application.bot_data['service_msgs'][key].items():
+                if msg:
+                    await application.bot.delete_message(moder_id, msg.id)
+                continue
         del application.bot_data['service_msgs']
         del application.bot_data['waitlist']
 
@@ -1363,10 +1385,10 @@ class ChatGPTTelegramBot:
             key = str(uuid4())  # Generate ID and separate value from command
             context.bot_data["waitlist"][user] = key  # Store user and key in bot_data
 
-            for moder in self.moder_ids:
+            for moder_id in self.moder_ids:
                 try:
                     msg = await context.bot.send_message(
-                        chat_id=moder,
+                        chat_id=moder_id,
                         reply_markup=await moder_action_keyboard(key, self.bot_language),
                         parse_mode=constants.ParseMode.HTML,
                         # text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
@@ -1374,10 +1396,28 @@ class ChatGPTTelegramBot:
                              f"{user.mention_html()}! "
                              f"{localized_text('new_user', self.bot_language)[1]}"
                     )
-                    context.bot_data["service_msgs"].setdefault(key, {}).setdefault(moder, []).append(msg)
+                    context.bot_data["service_msgs"].setdefault(key, {}).setdefault(moder_id, msg)
                 except:
                     continue
         else:
+            key = context.bot_data["waitlist"][user]
+            for moder_id, msg in context.bot_data['service_msgs'][key].items():
+                try:
+                    if not msg:
+                        raise Exception
+                    await context.bot.delete_message(moder_id, msg.id)
+                    upd_msg = await context.bot.send_message(
+                        chat_id=moder_id,
+                        reply_markup=await moder_action_keyboard(key, self.bot_language),
+                        parse_mode=constants.ParseMode.HTML,
+                        # text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
+                        text=f"{localized_text('new_user', self.bot_language)[0]} "
+                             f"{user.mention_html()}! "
+                             f"{localized_text('new_user', self.bot_language)[1]}"
+                    )
+                    context.bot_data["service_msgs"].setdefault(key, {}).setdefault(moder_id, upd_msg)
+                except:
+                    continue
             # user_msg = "⚠️Ждем решения модератора..."
             user_msg = localized_text("waiting_moderator", self.bot_language)
 
@@ -1395,10 +1435,7 @@ class ChatGPTTelegramBot:
         Runs the bot indefinitely until the user presses Ctrl+C
         """
         pathlib.Path("data").mkdir(exist_ok=True)
-        persistence = PicklePersistence(
-            filepath=self.config['persistence_file']
-            # filepath="data/mia_rs_chat_bot_data"
-        )
+        persistence = PicklePersistence(filepath=self.config['persistence_file'])
 
         application = (
             ApplicationBuilder()

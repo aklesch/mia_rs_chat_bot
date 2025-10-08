@@ -7,6 +7,7 @@
     "wait_for_approve": "⚠ Please wait for moderator approve",
     "waiting_moderator": "⚠ Still waiting for moderator's decision...",
     "user_was_denied": "⛔ Moderator declined your request",
+    "user_was_approved": "✅ Nice, you were approved to use this this bot",
     "user_status": [
       "User",
       "was"
@@ -16,6 +17,8 @@
       "was",
       "moderator"
     ],
+    "user_denied": "denied!",
+    "user_approved": "approved",
     "moder_kb_approve": "Approve",
     "moder_kb_deny": "Deny",
     "help_description": "Show help message",
@@ -26,11 +29,11 @@
     "resend_description": "Resend the latest message",
     "chat_description": "Chat with the bot!",
     "disallowed": "Sorry, you are not allowed to use this bot. You can check out the source code at https://github.com/n3d1117/chatgpt-telegram-bot",
-    "budget_limit": "Sorry, you have reached your usage limit.",
+    "budget_limit": "\uD83E\uDEF0 Sorry, you have reached your usage limit.",
     "help_text": [
       "I'm a ChatGPT bot, talk to me!",
       "Send me a voice message or file and I'll transcribe it for you",
-      "Open source at https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Current conversation",
@@ -93,7 +96,7 @@
     "help_text": [
       "أنا بوت ChatGPT، يمكنك التحدث إلي!",
       "إرسال رسالة صوتية أو ملف لتحويلهما إلى نص",
-      "مفتوح المصدر على https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "المحادثة الحالية",
@@ -156,7 +159,7 @@
     "help_text": [
       "Ich bin ein ChatGPT Bot, rede mit mir!",
       "Sende eine Sprachnachricht oder Datei und ich fertige dir eine Abschrift an",
-      "Quelloffener Code unter https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Aktuelle Konversation",
@@ -219,7 +222,7 @@
     "help_text": [
       "Soy un bot de ChatGPT, ¡háblame!",
       "Envíame un mensaje de voz o un archivo y lo transcribiré para ti",
-      "Código abierto en https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Conversación actual",
@@ -282,7 +285,7 @@
     "help_text": [
       "من یک ربات ChatGPT هستم، با من صحبت کنید!",
       "برای من پیام صوتی یا فایل بفرستید تا آن را برای شما رونویسی کنم",
-      "منبع باز در https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "مکالمه فعلی",
@@ -345,7 +348,7 @@
     "help_text": [
       "Olen ChatGPT-botti, keskustele kanssani!",
       "Lähetä minulle ääniviesti tai -tiedosto, ja litteroin sen sinulle",
-      "Avoin lähdekoodi osoittessa https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Nykyinen keskustelu",
@@ -408,7 +411,7 @@
     "help_text": [
       "אני בוט של ChatGPT, דבר איתי!",
       "שלח לי הודעה קולית או קובץ ואני אתרגם אותו בשבילך",
-      "קוד פתוח ב https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "שיחה נוכחית",
@@ -471,7 +474,7 @@
     "help_text": [
       "Saya adalah bot ChatGPT, obrolan dengan saya!",
       "Kirimkan pesan suara atau file dan saya akan mentranskripsinya untuk Anda",
-      "Sumber terbuka di https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Percakapan saat ini",
@@ -534,7 +537,7 @@
     "help_text": [
       "Sono un bot di ChatGPT, chiedimi qualcosa!",
       "Invia un messaggio vocale o un file e lo trascriverò per te.",
-      "Open source su https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Conversazione attuale",
@@ -597,7 +600,7 @@
     "help_text": [
       "Saya bot ChatGPT, bercakap dengan saya!",
       "Hantar mesej suara atau fail kepada saya dan saya akan menyalinnya untuk anda",
-      "Sumber terbuka di https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Perbualan semasa",
@@ -660,7 +663,7 @@
     "help_text": [
       "Ik ben een ChatGPT bot, praat met me.",
       "Stuur me een spraakbericht en ik zet het om naar tekst",
-      "Open de source code op https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Huidig gesprek",
@@ -723,7 +726,7 @@
     "help_text": [
       "Jestem botem ChatGPT, porozmawiaj ze mną!",
       "Wyślij mi wiadomość głosową lub plik, a ja ją dla Ciebie przepiszę",
-      "Otwarty kod źródłowy dostępny na https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Bieżąca rozmowa",
@@ -786,7 +789,7 @@
     "help_text": [
       "Eu sou um bot ChatGPT, fale comigo!",
       "Envie-me uma mensagem de voz ou arquivo e eu o transcreverei para você",
-      "Código-fonte aberto em https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Conversa atual",
@@ -844,6 +847,7 @@
     "wait_for_approve": "⚠ Пожалуйста, дождитесь аппрува модератора",
     "waiting_moderator": "⚠ Ждем решение модератора...",
     "user_was_denied": "⛔ Модератор отклонил Вашу заявку!",
+    "user_was_approved": "✅ Отлично, Вам разрешено использовать данного бота",
     "user_status": [
       "Пользователь",
       "был"
@@ -853,6 +857,8 @@
       "был",
       "модератором"
     ],
+    "user_denied": "отклонен!",
+    "user_approved": "разрешен",
     "moder_kb_approve": "Разрешить",
     "moder_kb_deny": "Запретить",
     "help_description": "Показать справочное сообщение",
@@ -863,11 +869,11 @@
     "resend_description": "Повторная отправка последнего сообщения",
     "chat_description": "Общайся с ботом!",
     "disallowed": "⛔ Извини, тебе запрещено использовать этого бота",
-    "budget_limit": "Извини, ты достиг предела использования",
+    "budget_limit": "\uD83E\uDEF0 Извини, ты достиг лимита использования",
     "help_text": [
       "Я бот ChatGPT, поговори со мной!",
       "Пришли мне голосовое сообщение или файл, и я сделаю тебе расшифровку",
-      "Открытый исходный код на https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Текущий разговор",
@@ -930,7 +936,7 @@
     "help_text": [
       "Ben bir ChatGPT botuyum, konuş benimle!",
       "Bana bir sesli mesaj veya dosya gönderin, sizin için yazıya çevireyim",
-      "Açık kaynak kodu: https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Güncel sohbet",
@@ -993,7 +999,7 @@
     "help_text": [
       "Я бот ChatGPT, розмовляйте зі мною!",
       "Надішліть мені голосове повідомлення або файл, і я транскрибую його для вас",
-      "Відкритий код за адресою https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Поточна розмова",
@@ -1056,7 +1062,7 @@
     "help_text": [
       "Men ChatGPT botman, men bilan gaplashing!",
       "Menga ovozli xabar yoki fayl yuboring, men uni siz uchun transkripsiya qilaman",
-      "Ochiq manba: https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Hozirgi suhbat",
@@ -1119,7 +1125,7 @@
     "help_text": [
       "Tôi là bot ChatGPT, hãy nói chuyện với tôi!",
       "Hãy gửi cho tôi một tin nhắn thoại hoặc tệp và tôi sẽ phiên âm nó cho bạn",
-      "Mã nguồn mở tại https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "Cuộc trò chuyện hiện tại",
@@ -1182,7 +1188,7 @@
     "help_text": [
       "我是一个ChatGPT机器人，请和我交谈！",
       "发送语音消息或文件，我会为您进行转录。",
-      "源代码：https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "当前对话",
@@ -1245,7 +1251,7 @@
     "help_text": [
       "我是一個 ChatGPT 機器人，跟我聊天吧！",
       "傳送語音訊息或檔案給我，我會為您進行轉錄",
-      "開放原始碼在：https://github.com/n3d1117/chatgpt-telegram-bot"
+      ""
     ],
     "stats_conversation": [
       "目前的對話",
