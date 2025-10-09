@@ -1,17 +1,28 @@
 from __future__ import annotations
 
 import asyncio
+import base64
 import itertools
 import json
 import logging
 import os
-import base64
-
 import telegram
-from telegram import Message, MessageEntity, Update, ChatMember, constants
+
+from typing import TYPE_CHECKING
+
+if TYPE_CHECKING:
+    from telegram_bot import ChatGPTTelegramBot
+
+from telegram import ChatMember, constants, Message, MessageEntity, Update, User
 from telegram.ext import CallbackContext, ContextTypes
 
 from usage_tracker import UsageTracker
+
+COST_MAP = {
+    "monthly": "cost_month",
+    "daily": "cost_today",
+    "all-time": "cost_all_time"
+}
 
 
 def message_text(message: Message) -> str:
@@ -230,6 +241,29 @@ def get_user_budget(config, user_id) -> float | None:
         return float(user_budgets[user_index])
     return None
 
+
+def get_rem(bot_obj: ChatGPTTelegramBot, user_id: User.id) -> float:
+    """
+    Calculate the remaining budget for a user based on their current usage.
+    :param bot_obj: The bot object
+    :param user_id: Telegram User ID
+    :return: The remaining budget for the user as a float
+    """
+    budget_period = COST_MAP[bot_obj.config['budget_period']]
+    user_budget = 0
+    match user_id:
+        case _ if user_id in bot_obj.admin_ids:
+            user_budget = bot_obj.config['budget']['admin']
+        case _ if user_id in bot_obj.moder_ids:
+            user_budget = bot_obj.config['budget']['moder']
+        case _ if user_id in bot_obj.user_ids:
+            user_budget = bot_obj.config['budget']['user']
+        case _:
+            user_budget = 0
+
+    cost = bot_obj.usage[user_id].get_current_cost()[budget_period]
+    rem = user_budget - cost
+    return rem
 
 def get_remaining_budget(config, usage, update: Update, is_inline=False) -> float:
     """

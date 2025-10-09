@@ -1,0 +1,18 @@
+{
+  "user_name": "@inamoral",
+  "current_cost": {
+    "day": 1.0,
+    "month": 1.0,
+    "all_time": 1.0,
+    "last_update": "2025-10-09"
+  },
+  "usage_history": {
+    "chat_tokens": {
+      "2025-10-09": 500000
+    },
+    "transcription_seconds": {},
+    "number_images": {},
+    "tts_characters": {},
+    "vision_tokens": {}
+  }
+}

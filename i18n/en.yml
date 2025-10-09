@@ -1,0 +1,111 @@
+en:
+  commands:
+    admin:
+      set_budget: Set budget per user
+      admin_stat: Show overall statistics
+    chat: Chat with the bot!
+    image: Generate image from prompt (e.g. /image cat)
+    help: Show help message
+    manage_users: Users management
+    resend: Resend the latest message
+    reset: Reset the conversation. Optionally pass high-level instructions (e.g. /reset You are a helpful assistant)
+    stats: Get your current usage statistics
+    tts: Generate speech from text (e.g. /tts [voice] my house)
+    tts_preview: Send speech example from list of available voices (submenu)
+  keyboards:
+    status:
+      approved: approved
+      banned: banned
+    admin_approve:
+      approve: Approve
+      deny: Deny
+      new_user: New user %{user}! What to do with him?
+      user_status: User %{user} was %{action}!
+      user_status_full: User %{user} was %{action} by admin %{admin}!
+    voice_list:
+      send_preview: 🔈 Send preview
+      generate: 🗣️Generate speech
+      change_voice: 🛠️ Change voice
+      cancel: ❌ Cancel
+  menus:
+  messages:
+    admin:
+      no_budget: Please provide budget value! (e.g. /set_budget 1.0)
+    approved: ✅ Nice, you were approved to use this this bot
+    budget_limit: 🫰Sorry, you have reached your usage limit!
+    disallowed: ⛔ Sorry, you are not allowed to use this bot
+    must_be_approved: ⚠️ Please wait for admin approve
+    waiting_admin: ⚠️ Still waiting for the admin's decision...
+    must_be_subscribed: 🔔 To use this Telegram bot, you need to subscribe to the @%{channel_name} channel
+    resend_failed: You have nothing to resend
+    reset_done: Done!
+    image_no_prompt: Please provide a prompt! (e.g. /image cat)
+    image_fail: Failed to generate image
+  tts_preview: Please, choose voice
+  tts_selected_voice: |-
+    Selected voice - *%{voice}*!
+    What to do next?
+  tts_no_prompt: Please, provide text! (e.g. /tts my house)
+  tts_no_voice: Please, select voice first!
+  vision_fail: Failed to interpret image
+  stats_openai: This month your OpenAI account was billed $
+  transcribe_fail: Failed to transcribe text
+  stats:
+    current:
+      conversation: '*Current conversation:*'
+      messages: messages in history - %{msgs}
+      tokens: chat tokens in history - %{tokens}
+    usage_today: "*Usage today:*"
+    usage_month: "*Usage this month:*"
+    tokens: '%{tokens} tokens'
+    images: images generated - %{images}
+    vision: image tokens interpreted - %{tokens}
+    tts: characters converted to speech - %{chars}
+    stt_old: '%{minutes} minute(s) and %{seconds} second(s) transcribed'
+    stt: '%{duration} transcribed'
+    total: 💰 for a total amount of $%{cost}
+    budget: "*remaining budget %{period} - $%{left}*"
+  stats_tts: characters converted to speech
+  show_usage:
+    stats_tokens: tokens
+    prompt: prompt
+    completion: completion
+  loading: Loading...
+  stats_images: images generated
+  chat_fail: Failed to get response
+  usage_today: Usage today
+  stats_conversation:
+    a: Current conversation
+    b: chat messages in history
+    c: chat tokens in history
+  tts_selected_preview_description: 'Selected voice:'
+  daily: for today
+  openai_invalid: OpenAI Invalid request
+  monthly: for this month
+  must_subscribe: 🔔 To use this Telegram bot, you need to subscribe to the @ir_sputnik channel
+#  must_subscribe: 🔔 To use this Telegram bot, you need to subscribe to the @aamite_test_channel channel
+  stats_vision: image tokens interpreted
+  stats_total: 💰 For a total amount of $
+  help_text:
+    title: I'm a ChatGPT bot, talk to me!
+    footer: Send me a voice message or file and I'll transcribe it for you
+  media_type_fail: Unsupported file type
+  media_download_fail:
+    a: Failed to download audio file
+    b: Make sure the file is not too large. (max 20MB)
+  error: An error has occurred
+  ask_chatgpt: Ask ChatGPT
+  usage_month: Usage this month
+  stats_budget: Your remaining budget
+  transcript: Transcript
+  function_unavailable_in_inline_mode: This function is unavailable in inline mode
+  answer_with_chatgpt: Answer with ChatGPT
+  all-time: ''
+  try_again: Please try again in a while
+  tts_fail: Failed to generate speech
+  answer: Answer
+  tts_preview_back_button: Back to voice select
+  stats_transcribe:
+    m: minutes and
+    s: seconds transcribed
+  openai_rate_limit: OpenAI Rate Limit exceeded

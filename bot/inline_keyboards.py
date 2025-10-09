@@ -1,4 +1,4 @@
-from i18n import localized_text
+from translations import localized_text
 from telegram import InlineKeyboardButton, InlineKeyboardMarkup
 
 

@@ -9,7 +9,7 @@ import openai
 import os
 import tiktoken
 
-from i18n import localized_text
+from translations import localized_text
 from PIL import Image
 from plugin_manager import PluginManager
 from tenacity import retry, stop_after_attempt, wait_fixed, retry_if_exception_type
@@ -31,7 +31,7 @@ def default_max_tokens(model: str) -> int:
     """
     Gets the default number of max tokens for the given model.
     :param model: The model name
-    :return: The default number of max tokens
+    :return int: The default number of max tokens
     """
     base = 1200
     if model in GPT_3_MODELS:
@@ -52,6 +52,7 @@ def default_max_tokens(model: str) -> int:
         return 4096
     elif model in O_MODELS:
         return 4096
+    return base
 
 
 def are_functions_available(model: str) -> bool:

@@ -7,15 +7,8 @@ from utils import (
     get_thread_id,
     is_group_chat,
     is_user_in_group,
-    get_remaining_budget,
+    get_rem
 )
-
-
-COST_MAP = {
-    "monthly": "cost_month",
-    "daily": "cost_today",
-    "all-time": "cost_all_time"
-}
 
 
 def check_permissions(func):
@@ -54,25 +47,12 @@ def budget_check(func):
         if not user:
             raise ApplicationHandlerStop
 
-        usage: UsageTracker = self.usage.setdefault(user.id, UsageTracker(user.id, user.name))
+        self.usage.setdefault(user.id, UsageTracker(user.id, user.name))
+        # TODO - check {func.__name__}
 
-        budget_period = COST_MAP[self.config['budget_period']]
+        remaining_budget = get_rem(self, user.id)
 
-        user_budget = 0
-        match user.id:
-            case _ if user.id in self.admin_ids:
-                user_budget = self.config['budget']['admin']
-            case _ if user.id in self.moder_ids:
-                user_budget = self.config['budget']['moder']
-            case _ if user.id in self.user_ids:
-                user_budget = self.config['budget']['user']
-            case _:
-                user_budget = 0
-
-        cost = usage.get_current_cost()[budget_period]
-        # rem = user_budget - cost
-
-        if user_budget > cost:
+        if remaining_budget > 0:
             return None
         else:
             logging.warning(f'User {user.name} (id: {user.id}) reached their usage limit')
@@ -125,8 +105,8 @@ def user_restricted(func):
             logging.warning(f"Unauthorized access to '{func.__name__}' from user {user_id}")
             return
         if not is_inline and is_group_chat(update):
-            for user in self.admin_ids | self.user_ids:
-                if not await is_user_in_group(update, context, user):
+            for user_id in self.admin_ids | self.user_ids:
+                if not await is_user_in_group(update, context, user_id):
                     # logging.info(f'{user} is a member. Allowing group chat message...')
                     return
             logging.info(f'Group chat messages from user {name} (id: {user_id}) are not allowed')
@@ -152,59 +132,3 @@ def send_action(action):
         return command_func
 
     return decorator
-
-
-def budget(func):
-    @functools.wraps(func)
-    async def wrapped(self, update, context, is_inline=False, *args, **kwargs):
-        user = update.inline_query.from_user if is_inline else update.effective_user
-        msg = self.budget_limit_message
-
-        if user and user.id not in self.usage:
-            self.usage[user.id] = UsageTracker(user.id, user.name)
-        remaining_budget = get_remaining_budget(self.config, self.admin_ids, self.user_ids, self.usage, update, is_inline=is_inline)
-
-        if not remaining_budget > 0:
-            logging.warning(f'User {user.name} (id: {user.id}) reached their usage limit')
-            await self._send_message(update, context, msg, is_inline)
-            return
-        return await func(self, update, context, *args, **kwargs)
-
-    return wrapped
-
-
-# class send_action1(object):
-#     def __init__(self, func):
-#         self._func = func
-#         self._obj = None
-#         self._wrapped = None
-#
-#     def __call__(self, *args, **kwargs):
-#         if not self._wrapped:
-#             if self._obj:
-#                 self._wrapped = self._wrap_method(self._func)
-#                 self._wrapped = functools.partial(self._wrapped, self._obj)
-#             else:
-#                 self._wrapped = self._wrap_function(self._func)
-#         return self._wrapped(*args, **kwargs)
-#
-#     def __get__(self, obj, type=None):
-#         self._obj = obj
-#         return self
-#
-#     def _wrap_method(self, method):
-#         @functools.wraps(method)
-#         def inner(self, *args, **kwargs):
-#             print('Method called on {}:'.format(type(self).__name__))
-#             return method(self, *args, **kwargs)
-#
-#         return inner
-#
-#
-#     def _wrap_function(self, function):
-#         @functools.wraps(function)
-#         def inner(*args, **kwargs):
-#             print('Function called:')
-#             return function(*args, **kwargs)
-#
-#         return inner
