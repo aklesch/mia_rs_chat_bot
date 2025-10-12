@@ -71,6 +71,9 @@ class UsageTracker:
             }
 
     def write_to_file(self):
+        """
+        Writes usage data to user log file
+        """
         with open(self.user_file, "w") as outfile:
             json.dump(self.usage, outfile)
 
@@ -88,19 +91,10 @@ class UsageTracker:
 
         # update or create usage_history
         usage[today] = usage.get(today, 0) + tokens
-        # if today in usage:
-        #     usage[today] += tokens
-        # else:
-        #     usage[today] = tokens
-
         self.write_to_file()
-        # write updated token usage to user file
-        # with open(self.user_file, "w") as outfile:
-        #     json.dump(self.usage, outfile)
 
     def get_current_token_usage(self):
         """Get token amounts used for today and this month
-
         :return: total number of tokens used per day and per month
         """
         today = str(date.today())
@@ -117,7 +111,6 @@ class UsageTracker:
     # image usage functions:
     def add_image_request(self, image_size, image_prices="0.016,0.018,0.02"):
         """Add image request to users usage history and update current costs.
-
         :param image_size: requested image size
         :param image_prices: prices for images of sizes ["256x256", "512x512", "1024x1024"],
                              defaults to [0.016, 0.018, 0.02]
@@ -125,21 +118,15 @@ class UsageTracker:
         sizes = ["256x256", "512x512", "1024x1024"]
         requested_size = sizes.index(image_size)
         image_cost = image_prices[requested_size]
-        today = date.today()
+        today = str(date.today())
         self.add_current_costs(image_cost)
 
-        # update usage_history
-        if str(today) in self.usage["usage_history"]["number_images"]:
-            # add token usage to existing date
-            self.usage["usage_history"]["number_images"][str(today)][requested_size] += 1
-        else:
-            # create new entry for current date
-            self.usage["usage_history"]["number_images"][str(today)] = [0, 0, 0]
-            self.usage["usage_history"]["number_images"][str(today)][requested_size] += 1
+        usage = self.usage["usage_history"]["number_images"].setdefault(today, [0, 0, 0])
 
-        # write updated image number to user file
-        with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+        # update usage_history
+        usage[requested_size] += 1
+
+        self.write_to_file()
 
     def get_current_image_count(self):
         """Get number of images requested for today and this month.
@@ -200,29 +187,24 @@ class UsageTracker:
 
     # tts usage functions:
     def add_tts_request(self, text_length, tts_model, tts_prices):
+        """Add tts request to users usage history and update current costs.
+        :param text_length: length of text to generate speach from
+        :param tts_model: tts model to generate speach with,
+        :param tts_prices: prices for tts models, defaults to [0.016, 0.018, 0.02]
+        """
         tts_models = ['tts-1', 'tts-1-hd']
-        price = tts_prices[tts_models.index(tts_model)]
-        today = date.today()
-        tts_price = round(text_length * price / 1000, 2)
+        requested_tts_model = tts_models.index(tts_model)
+        price = tts_prices[requested_tts_model]
+        today = str(date.today())
+        tts_price = round(text_length * price / 1000, 6)
         self.add_current_costs(tts_price)
 
-        if 'tts_characters' not in self.usage['usage_history']:
-            self.usage['usage_history']['tts_characters'] = {}
-        
-        if tts_model not in self.usage['usage_history']['tts_characters']:
-            self.usage['usage_history']['tts_characters'][tts_model] = {}
+        usage = self.usage['usage_history']['tts_characters'].setdefault(tts_model, {})
 
         # update usage_history
-        if str(today) in self.usage["usage_history"]["tts_characters"][tts_model]:
-            # add requested text length to existing date
-            self.usage["usage_history"]["tts_characters"][tts_model][str(today)] += text_length
-        else:
-            # create new entry for current date
-            self.usage["usage_history"]["tts_characters"][tts_model][str(today)] = text_length
+        usage[today] = usage.get(today, 0) + text_length
 
-        # write updated token usage to user file
-        with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+        self.write_to_file()
 
     def get_current_tts_usage(self):
         """Get length of speech generated for today and this month.
@@ -268,6 +250,22 @@ class UsageTracker:
         # write updated token usage to user file
         with open(self.user_file, "w") as outfile:
             json.dump(self.usage, outfile)
+
+    def add_stt_seconds(self, seconds, minute_price=0.006):
+        """Adds requested transcription (stt) seconds to a users usage history and updates current cost.
+        :param seconds: total seconds used in last request
+        :param minute_price: price per minute transcription, defaults to 0.006
+        """
+        today = str(date.today())
+        stt_cost = round(seconds * minute_price / 60, 6)
+        self.add_current_costs(stt_cost)
+
+        usage = self.usage['usage_history']["transcription_seconds"]
+
+        # update usage_history
+        usage[today] = usage.get(today, 0) + seconds
+
+        self.write_to_file()
 
     def add_current_costs(self, request_cost):
         """

@@ -45,6 +45,7 @@ from usage_tracker import UsageTracker
 from utils import (
     add_chat_request_to_usage_tracker,
     cleanup_intermediate_files,
+    delete_stt_files,
     edit_message_with_retry,
     error_handler,
     get_rem,
@@ -361,18 +362,19 @@ class ChatGPTTelegramBot:
         if image_query == '':
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
-                text=localized_text('message.image_no_prompt', lang)
+                text=localized_text('messages.image_no_prompt', lang)
             )
             return
 
         logging.info(f'New image generation request received from user {user.name} (id: {user.id})')
 
-        await self._generate_image(update, context, image_query)
+        await self._generate_image(update, context)
 
-    @send_action(constants.ChatAction.UPLOAD_PHOTO)
-    async def _generate_image(self, update: Update, context: ContextTypes.DEFAULT_TYPE, image_query) -> None:
+    @send_action(constants.ChatAction.RECORD_VOICE)
+    async def _generate_image(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         user = update.effective_user
         lang = user.language_code
+        image_query = message_text(update.message)
 
         try:
             image_url, image_size = await self.openai.generate_image(prompt=image_query)
@@ -389,8 +391,8 @@ class ChatGPTTelegramBot:
             else:
                 raise Exception(
                     f"env variable IMAGE_RECEIVE_MODE has invalid value {self.config['image_receive_mode']}")
-            # add image request to users usage tracker
 
+            # add image request to users usage tracker
             self.usage[user.id].add_image_request(image_size, self.config['image_prices'])
 
         except Exception as e:
@@ -404,27 +406,32 @@ class ChatGPTTelegramBot:
 
     async def tts(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
-        Generates an speech for the given input using TTS APIs
+        Generates a speech for the given input using TTS APIs
         """
-        if not self.config['enable_tts_generation'] \
-                or not await self.check_allowed_and_within_budget(update, context):
+        if not self.config['enable_tts_generation']:
             return
+
+        user = update.effective_user
+        lang = user.language_code
 
         tts_query = message_text(update.message)
         if tts_query == '':
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
-                text=localized_text('tts_no_prompt', self.bot_language)
+                text=localized_text('messages.tts_no_prompt', lang)
             )
             return
 
-        logging.info(f'New speech generation request received from user {update.message.from_user.name} '
-                     f'(id: {update.message.from_user.id})')
+        logging.info(f'New speech generation request received from user {user.name} (id: {user.id})')
 
-        await self._generate_tts(update, context, tts_query)
+        await self._generate_tts(update, context)
 
-    @send_action(constants.ChatAction.UPLOAD_VIDEO)
-    async def _generate_tts(self, update: Update, context: ContextTypes.DEFAULT_TYPE, tts_query: str) -> None:
+    @send_action(constants.ChatAction.UPLOAD_VOICE)
+    async def _generate_tts(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
+        user = update.effective_user
+        lang = user.language_code
+        tts_query = message_text(update.message)
+
         try:
             speech_file, text_length = await self.openai.generate_speech(text=tts_query)
 
@@ -433,19 +440,16 @@ class ChatGPTTelegramBot:
                 voice=speech_file
             )
             speech_file.close()
+
             # add image request to users usage tracker
-            user_id = update.message.from_user.id
-            self.usage[user_id].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
-            # add guest chat request to guest usage tracker
-            if str(user_id) not in self.config['allowed_user_ids'].split(',') and 'guests' in self.usage:
-                self.usage["guests"].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
+            self.usage[user.id].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
 
         except Exception as e:
             logging.exception(e)
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=f"{localized_text('tts_fail', self.bot_language)}: {str(e)}",
+                text=f"{localized_text('messages.tts_fail', lang)}: {str(e)}",
                 parse_mode=constants.ParseMode.MARKDOWN
             )
 
@@ -453,20 +457,24 @@ class ChatGPTTelegramBot:
         """
         Transcribe audio messages.
         """
-        if not self.config['enable_transcription'] or not await self.check_allowed_and_within_budget(update, context):
+        if not self.config['enable_transcription']:
             return
 
         if is_group_chat(update) and self.config['ignore_group_transcriptions']:
             logging.info('Transcription coming from group chat, ignoring...')
             return
 
-        await self._execute_trancribe(update, context)
+        await self._execute_transcribe(update, context)
 
     @send_action(constants.ChatAction.TYPING)
-    async def _execute_trancribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
+    async def _execute_transcribe(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         chat_id = update.effective_chat.id
+        user = update.effective_user
+        lang = user.language_code
         filename = update.message.effective_attachment.file_unique_id
         filename_mp3 = f'{filename}.mp3'
+        files = [filename, filename_mp3]
+
         try:
             media_file = await context.bot.get_file(update.message.effective_attachment.file_id)
             await media_file.download_to_drive(filename)
@@ -476,103 +484,73 @@ class ChatGPTTelegramBot:
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
                 text=(
-                    f"{localized_text('media_download_fail', self.bot_language)[0]}: "
-                    f"{str(e)}. {localized_text('media_download_fail', self.bot_language)[1]}"
+                    f"{localized_text('messages.media_download_fail.error', lang, filtype='audio')}: "
+                    f"{str(e)}. {localized_text('messages.media_download_fail.size', lang)}"
                 ),
                 parse_mode=constants.ParseMode.MARKDOWN
             )
+            delete_stt_files(files)
             return
 
         try:
             audio_track = AudioSegment.from_file(filename)
             audio_track.export(filename_mp3, format="mp3")
-            logging.info(f'New transcribe request received from user {update.message.from_user.name} '
-                         f'(id: {update.message.from_user.id})')
-
+            logging.info(f'New transcribe request received from user {user.name} (id: {user.id})')
         except Exception as e:
             logging.exception(e)
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=localized_text('media_type_fail', self.bot_language)
+                text=localized_text('messages.media_type_fail', lang)
             )
-            if os.path.exists(filename):
-                os.remove(filename)
+            delete_stt_files(files)
             return
-
-        user_id = update.message.from_user.id
-        if user_id not in self.usage:
-            self.usage[user_id] = UsageTracker(user_id, update.message.from_user.name)
 
         try:
             transcript = await self.openai.transcribe(filename_mp3)
-
             transcription_price = self.config['transcription_price']
-            self.usage[user_id].add_transcription_seconds(audio_track.duration_seconds, transcription_price)
-
-            allowed_user_ids = self.config['allowed_user_ids'].split(',')
-            if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
-                self.usage["guests"].add_transcription_seconds(audio_track.duration_seconds, transcription_price)
+            self.usage[user.id].add_stt_seconds(audio_track.duration_seconds, transcription_price)
 
             # check if transcript starts with any of the prefixes
             response_to_transcription = any(transcript.lower().startswith(prefix.lower()) if prefix else False
                                             for prefix in self.config['voice_reply_prompts'])
 
             if self.config['voice_reply_transcript'] and not response_to_transcription:
-
                 # Split into chunks of 4096 characters (Telegram's message limit)
-                transcript_output = f"_{localized_text('transcript', self.bot_language)}:_\n\"{transcript}\""
-                chunks = split_into_chunks(transcript_output)
-
-                for index, transcript_chunk in enumerate(chunks):
-                    await update.effective_message.reply_text(
-                        message_thread_id=get_thread_id(update),
-                        reply_to_message_id=get_reply_to_message_id(self.config, update) if index == 0 else None,
-                        text=transcript_chunk,
-                        parse_mode=constants.ParseMode.MARKDOWN
-                    )
+                transcript_output = f"_{localized_text('transcript', lang)}:_\n\"{transcript}\""
             else:
                 # Get the response of the transcript
                 response, total_tokens = await self.openai.get_chat_response(chat_id=chat_id, query=transcript)
-
-                self.usage[user_id].add_chat_tokens(total_tokens, self.config['token_price'])
-                if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
-                    self.usage["guests"].add_chat_tokens(total_tokens, self.config['token_price'])
-
-                # Split into chunks of 4096 characters (Telegram's message limit)
                 transcript_output = (
-                    f"_{localized_text('transcript', self.bot_language)}:_\n\"{transcript}\"\n\n"
-                    f"_{localized_text('answer', self.bot_language)}:_\n{response}"
+                    f"_{localized_text('transcript', lang)}:_\n\"{transcript}\"\n\n"
+                    f"_{localized_text('answer', lang)}:_\n{response}"
                 )
-                chunks = split_into_chunks(transcript_output)
 
-                for index, transcript_chunk in enumerate(chunks):
-                    await update.effective_message.reply_text(
-                        message_thread_id=get_thread_id(update),
-                        reply_to_message_id=get_reply_to_message_id(self.config, update) if index == 0 else None,
-                        text=transcript_chunk,
-                        parse_mode=constants.ParseMode.MARKDOWN
-                    )
-
+            # Split into chunks of 4096 characters (Telegram's message limit)
+            chunks = split_into_chunks(transcript_output)
+            for index, transcript_chunk in enumerate(chunks):
+                await update.effective_message.reply_text(
+                    message_thread_id=get_thread_id(update),
+                    reply_to_message_id=get_reply_to_message_id(self.config, update) if index == 0 else None,
+                    text=transcript_chunk,
+                    parse_mode=constants.ParseMode.MARKDOWN
+                )
         except Exception as e:
             logging.exception(e)
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=f"{localized_text('transcribe_fail', self.bot_language)}: {str(e)}",
+                text=f"{localized_text('messages.transcribe_fail', lang)}: {str(e)}",
                 parse_mode=constants.ParseMode.MARKDOWN
             )
         finally:
-            if os.path.exists(filename_mp3):
-                os.remove(filename_mp3)
-            if os.path.exists(filename):
-                os.remove(filename)
+            delete_stt_files(files)
 
     async def vision(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         Interpret image using vision model.
         """
-        if not self.config['enable_vision'] or not await self.check_allowed_and_within_budget(update, context):
+        if not self.config['enable_vision']:
             return
 
         prompt = update.message.caption
@@ -588,11 +566,14 @@ class ChatGPTTelegramBot:
                     logging.info('Vision coming from group chat with wrong keyword, ignoring...')
                     return
 
-        await self._execute_vision(update, context, prompt)
+        await self._execute_vision(update, context)
 
     @send_action(constants.ChatAction.TYPING)
-    async def _execute_vision(self, update: Update, context: ContextTypes.DEFAULT_TYPE, prompt) -> None:
+    async def _execute_vision(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         chat_id = update.effective_chat.id
+        user = update.effective_user
+        lang = user.language_code
+        prompt = update.message.caption
         image = update.message.effective_attachment[-1]
         try:
             media_file = await context.bot.get_file(image.file_id)
@@ -603,38 +584,29 @@ class ChatGPTTelegramBot:
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
                 text=(
-                    f"{localized_text('media_download_fail', self.bot_language)[0]}: "
-                    f"{str(e)}. {localized_text('media_download_fail', self.bot_language)[1]}"
+                    f"{localized_text('messages.media_download_fail.error', lang, filtype='image')}: "
+                    f"{str(e)}. {localized_text('messages.media_download_fail.size', lang)}"
                 ),
                 parse_mode=constants.ParseMode.MARKDOWN
             )
             return
 
         # convert jpg from telegram to png as understood by openai
-
         temp_file_png = io.BytesIO()
 
         try:
             original_image = Image.open(temp_file)
-
             original_image.save(temp_file_png, format='PNG')
-            logging.info(f'New vision request received from user {update.message.from_user.name} '
-                         f'(id: {update.message.from_user.id})')
-
+            logging.info(f'New vision request received from user {user.name} (id: {user.id})')
         except Exception as e:
             logging.exception(e)
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=localized_text('media_type_fail', self.bot_language)
+                text=localized_text('messages.media_type_fail', lang)
             )
 
-        user_id = update.message.from_user.id
-        if user_id not in self.usage:
-            self.usage[user_id] = UsageTracker(user_id, update.message.from_user.name)
-
         if self.config['stream']:
-
             stream_response = self.openai.interpret_image_stream(chat_id=chat_id, fileobj=temp_file_png, prompt=prompt)
             i = 0
             prev = ''
@@ -659,6 +631,7 @@ class ChatGPTTelegramBot:
                                                           stream_chunks[-2])
                         except:
                             pass
+
                         try:
                             sent_message = await update.effective_message.reply_text(
                                 message_thread_id=get_thread_id(update),
@@ -666,6 +639,7 @@ class ChatGPTTelegramBot:
                             )
                         except:
                             pass
+
                         continue
 
                 cutoff = get_stream_cutoff_values(update, content)
@@ -683,41 +657,31 @@ class ChatGPTTelegramBot:
                         )
                     except:
                         continue
-
                 elif abs(len(content) - len(prev)) > cutoff or tokens != 'not_finished':
                     prev = content
-
                     try:
                         use_markdown = tokens != 'not_finished'
                         await edit_message_with_retry(context, chat_id, str(sent_message.message_id),
                                                       text=content, markdown=use_markdown)
-
                     except RetryAfter as e:
                         backoff += 5
                         await asyncio.sleep(e.retry_after)
                         continue
-
                     except TimedOut:
                         backoff += 5
                         await asyncio.sleep(0.5)
                         continue
-
                     except Exception:
                         backoff += 5
                         continue
-
                     await asyncio.sleep(0.01)
 
                 i += 1
                 if tokens != 'not_finished':
                     total_tokens = int(tokens)
-
-
         else:
-
             try:
                 interpretation, total_tokens = await self.openai.interpret_image(chat_id, temp_file_png, prompt=prompt)
-
                 try:
                     await update.effective_message.reply_text(
                         message_thread_id=get_thread_id(update),
@@ -737,7 +701,7 @@ class ChatGPTTelegramBot:
                         await update.effective_message.reply_text(
                             message_thread_id=get_thread_id(update),
                             reply_to_message_id=get_reply_to_message_id(self.config, update),
-                            text=f"{localized_text('vision_fail', self.bot_language)}: {str(e)}",
+                            text=f"{localized_text('messages.vision_fail', lang)}: {str(e)}",
                             parse_mode=constants.ParseMode.MARKDOWN
                         )
             except Exception as e:
@@ -749,27 +713,21 @@ class ChatGPTTelegramBot:
                     parse_mode=constants.ParseMode.MARKDOWN
                 )
         vision_token_price = self.config['vision_token_price']
-        self.usage[user_id].add_vision_tokens(total_tokens, vision_token_price)
-
-        allowed_user_ids = self.config['allowed_user_ids'].split(',')
-        if str(user_id) not in allowed_user_ids and 'guests' in self.usage:
-            self.usage["guests"].add_vision_tokens(total_tokens, vision_token_price)
+        self.usage[user.id].add_vision_tokens(total_tokens, vision_token_price)
 
     async def prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE):
         """
         React to incoming messages and respond accordingly.
         """
+        user = update.effective_user
+        lang = user.language_code
+        chat_id = update.effective_chat.id
+        prompt = message_text(update.message)
+
         if update.edited_message or not update.message or update.message.via_bot:
             return
 
-        if not await self.check_allowed_and_within_budget(update, context):
-            return
-
-        logging.info(
-            f'New message received from user {update.message.from_user.name} (id: {update.message.from_user.id})')
-        chat_id = update.effective_chat.id
-        user_id = update.message.from_user.id
-        prompt = message_text(update.message)
+        logging.info(f'New message received from user {user.name} (id: {user.id})')
         self.last_message[chat_id] = prompt
 
         if is_group_chat(update):
@@ -809,10 +767,8 @@ class ChatGPTTelegramBot:
                 async for content, tokens in stream_response:
                     if is_direct_result(content):
                         return await handle_direct_result(self.config, update, content)
-
                     if len(content.strip()) == 0:
                         continue
-
                     stream_chunks = split_into_chunks(content)
                     if len(stream_chunks) > 1:
                         content = stream_chunks[-1]
@@ -831,10 +787,8 @@ class ChatGPTTelegramBot:
                             except:
                                 pass
                             continue
-
                     cutoff = get_stream_cutoff_values(update, content)
                     cutoff += backoff
-
                     if i == 0:
                         try:
                             if sent_message is not None:
@@ -847,46 +801,36 @@ class ChatGPTTelegramBot:
                             )
                         except:
                             continue
-
                     elif abs(len(content) - len(prev)) > cutoff or tokens != 'not_finished':
                         prev = content
-
                         try:
                             use_markdown = tokens != 'not_finished'
                             await edit_message_with_retry(context, chat_id, str(sent_message.message_id),
                                                           text=content, markdown=use_markdown)
-
                         except RetryAfter as e:
                             backoff += 5
                             await asyncio.sleep(e.retry_after)
                             continue
-
                         except TimedOut:
                             backoff += 5
                             await asyncio.sleep(0.5)
                             continue
-
                         except Exception:
                             backoff += 5
                             continue
-
                         await asyncio.sleep(0.01)
-
                     i += 1
                     if tokens != 'not_finished':
                         total_tokens = int(tokens)
-
             else:
                 total_tokens = await self._reply_prompt(update, context, chat_id, prompt)
-
-            add_chat_request_to_usage_tracker(self.usage, self.config, user_id, total_tokens)
-
+            add_chat_request_to_usage_tracker(self.usage, self.config, user.id, total_tokens)
         except Exception as e:
             logging.exception(e)
             await update.effective_message.reply_text(
                 message_thread_id=get_thread_id(update),
                 reply_to_message_id=get_reply_to_message_id(self.config, update),
-                text=f"{localized_text('chat_fail', self.bot_language)} {str(e)}",
+                text=f"{localized_text('messages.chat_fail', lang)} {str(e)}",
                 parse_mode=constants.ParseMode.MARKDOWN
             )
 
