@@ -73,7 +73,7 @@ ru:
     stats_tokens: tokens
     prompt: prompt
     completion: completion
-  loading: Loading...
+  loading: Загрузка...
   usage_today: Usage today
   stats_conversation:
     a: Current conversation
@@ -88,16 +88,16 @@ ru:
   stats_total: 💰 For a total amount of $
   help_text:
     title: Я ChatGPT бот, поговори со мной!
-    footer: Send me a voice message or file and I'll transcribe it for you
-  error: An error has occurred
-  ask_chatgpt: Ask ChatGPT
+    footer: Пришли мне голосовое сообщение или файл, и я сделаю тебе расшифровку
+  error: Произошла ошибка
+  ask_chatgpt: Спросить ChatGPT
   usage_month: Usage this month
   stats_budget: Your remaining budget
   transcript: Transcript
-  function_unavailable_in_inline_mode: This function is unavailable in inline mode
-  answer_with_chatgpt: Answer with ChatGPT
+  function_unavailable_in_inline_mode: Эта функция недоступна в режиме inline
+  answer_with_chatgpt: Ответить с помощью ChatGPT
   all-time: ''
-  try_again: Please try again in a while
+  try_again: Пожалуйста, повторите попытку позже
   answer: Answer
   tts_preview_back_button: Back to voice select
   stats_transcribe:

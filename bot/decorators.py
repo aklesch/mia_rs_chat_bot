@@ -91,30 +91,6 @@ def moder_restricted(func):
     return wrapped
 
 
-def user_restricted(func):
-    """
-    Decorator for handlers allowing only user access.
-    """
-    @functools.wraps(func)
-    async def wrapped(self, update, context, is_inline=False, *args, **kwargs):
-        user_id = update.inline_query.from_user.id if is_inline else update.message.from_user.id
-        name = update.inline_query.from_user.name if is_inline else update.message.from_user.name
-        print(user_id, "is", " in" if user_id in self.all_ids else "not in", self.all_ids)
-        if user_id not in self.all_ids:
-            await self.send_disallowed_message(update, context)
-            logging.warning(f"Unauthorized access to '{func.__name__}' from user {user_id}")
-            return
-        if not is_inline and is_group_chat(update):
-            for user_id in self.admin_ids | self.user_ids:
-                if not await is_user_in_group(update, context, user_id):
-                    # logging.info(f'{user} is a member. Allowing group chat message...')
-                    return
-            logging.info(f'Group chat messages from user {name} (id: {user_id}) are not allowed')
-        return await func(self, update, context, *args, **kwargs)
-
-    return wrapped
-
-
 def send_action(action):
     """
     Sends `action` while processing func command.

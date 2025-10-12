@@ -152,21 +152,16 @@ class UsageTracker:
         :param tokens: total tokens used in last request
         :param vision_token_price: price per 1K tokens transcription, defaults to 0.01
         """
-        today = date.today()
-        token_price = round(tokens * vision_token_price / 1000, 2)
-        self.add_current_costs(token_price)
+        today = str(date.today())
+        token_cost = round(tokens * vision_token_price / 1000, 6)
+        self.add_current_costs(token_cost)
+
+        usage = self.usage["usage_history"]["vision_tokens"]
 
         # update usage_history
-        if str(today) in self.usage["usage_history"]["vision_tokens"]:
-            # add requested seconds to existing date
-            self.usage["usage_history"]["vision_tokens"][str(today)] += tokens
-        else:
-            # create new entry for current date
-            self.usage["usage_history"]["vision_tokens"][str(today)] = tokens
-
+        usage[today] = usage.get(today, 0) + tokens
         # write updated token usage to user file
-        with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+        self.write_to_file()
 
     def get_current_vision_tokens(self):
         """Get vision tokens for today and this month.

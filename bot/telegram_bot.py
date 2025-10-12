@@ -823,8 +823,9 @@ class ChatGPTTelegramBot:
                     if tokens != 'not_finished':
                         total_tokens = int(tokens)
             else:
-                total_tokens = await self._reply_prompt(update, context, chat_id, prompt)
-            add_chat_request_to_usage_tracker(self.usage, self.config, user.id, total_tokens)
+                total_tokens = await self._reply_prompt(update, context)
+            token_price = self.config['token_price']
+            self.usage[user.id].add_chat_tokens(total_tokens, token_price)
         except Exception as e:
             logging.exception(e)
             await update.effective_message.reply_text(
@@ -835,7 +836,9 @@ class ChatGPTTelegramBot:
             )
 
     @send_action(constants.ChatAction.TYPING)
-    async def _reply_prompt(self, update: Update, context: ContextTypes.DEFAULT_TYPE, chat_id, prompt):
+    async def _reply_prompt(self, update: Update, _: ContextTypes.DEFAULT_TYPE):
+        chat_id = update.effective_chat.id
+        prompt = message_text(update.message)
         response, total_tokens = await self.openai.get_chat_response(chat_id=chat_id, query=prompt)
 
         if is_direct_result(response):
@@ -871,8 +874,8 @@ class ChatGPTTelegramBot:
         query = update.inline_query.query
         if len(query) < 3:
             return
-        if not await self.check_allowed_and_within_budget(update, context, is_inline=True):
-            return
+        # if not await self.check_allowed_and_within_budget(update, context, is_inline=True):
+        #     return
 
         callback_data_suffix = "gpt:"
         result_id = str(uuid4())
@@ -885,17 +888,19 @@ class ChatGPTTelegramBot:
         """
         Send inline query result
         """
+        user = update.effective_user
+        lang = user.language_code
         try:
             reply_markup = None
             if callback_data:
                 reply_markup = InlineKeyboardMarkup([[
-                    InlineKeyboardButton(text=f'🤖 {localized_text("answer_with_chatgpt", self.bot_language)}',
+                    InlineKeyboardButton(text=f'🤖 {localized_text("answer_with_chatgpt", lang)}',
                                          callback_data=callback_data)
                 ]])
 
             inline_query_result = InlineQueryResultArticle(
                 id=result_id,
-                title=localized_text("ask_chatgpt", self.bot_language),
+                title=localized_text("ask_chatgpt", lang),
                 input_message_content=InputTextMessageContent(message_content),
                 description=message_content,
                 thumbnail_url='https://user-images.githubusercontent.com/11541888/223106202-7576ff11-2c8e-408d-94ea-b02a7a32149a.png',
@@ -911,13 +916,12 @@ class ChatGPTTelegramBot:
         Handle the callback query from the inline query result
         """
         callback_data = update.callback_query.data
-        user_id = update.callback_query.from_user.id
+        user = update.callback_query.from_user
+        lang = user.language_code
         inline_message_id = update.callback_query.inline_message_id
-        name = update.callback_query.from_user.name
         callback_data_suffix = "gpt:"
         query = ""
-        answer_tr = localized_text("answer", self.bot_language)
-        loading_tr = localized_text("loading", self.bot_language)
+        answer_tr = localized_text("answer", lang)
 
         try:
             if callback_data.startswith(callback_data_suffix):
@@ -930,8 +934,8 @@ class ChatGPTTelegramBot:
                     self.inline_queries_cache.pop(unique_id)
                 else:
                     error_message = (
-                        f'{localized_text("error", self.bot_language)}. '
-                        f'{localized_text("try_again", self.bot_language)}'
+                        f'{localized_text("error", lang)}. '
+                        f'{localized_text("try_again", lang)}'
                     )
                     await edit_message_with_retry(context, chat_id=None, message_id=inline_message_id,
                                                   text=f'{query}\n\n_{answer_tr}:_\n{error_message}',
@@ -940,7 +944,7 @@ class ChatGPTTelegramBot:
 
                 unavailable_message = localized_text("function_unavailable_in_inline_mode", self.bot_language)
                 if self.config['stream']:
-                    stream_response = self.openai.get_chat_response_stream(chat_id=user_id, query=query)
+                    stream_response = self.openai.get_chat_response_stream(chat_id=user.id, query=query)
                     i = 0
                     prev = ''
                     backoff = 0
@@ -1002,32 +1006,35 @@ class ChatGPTTelegramBot:
                 else:
                     total_tokens = await self._send_inline_query_response(update, context, is_inline=True)
 
-                add_chat_request_to_usage_tracker(self.usage, self.config, user_id, total_tokens)
+                token_price = self.config['token_price']
+                self.usage[user.id].add_chat_tokens(total_tokens, token_price)
 
         except Exception as e:
             logging.error(f'Failed to respond to an inline query via button callback: {e}')
             logging.exception(e)
-            localized_answer = localized_text('chat_fail', self.bot_language)
+            localized_answer = localized_text('messages.chat_fail', lang)
             await edit_message_with_retry(context, chat_id=None, message_id=inline_message_id,
                                           text=f"{query}\n\n_{answer_tr}:_\n{localized_answer} {str(e)}",
                                           is_inline=True)
 
     @send_action(constants.ChatAction.TYPING)
     async def _send_inline_query_response(self, update: Update, context: CallbackContext, is_inline: bool = True):
-        user_id = update.callback_query.from_user.id
+        user = update.callback_query.from_user
+        name = user.name
+        lang = user.language_code
+
         inline_message_id = update.callback_query.inline_message_id
-        name = update.callback_query.from_user.name
         query = ""
-        answer_tr = localized_text("answer", self.bot_language)
-        loading_tr = localized_text("loading", self.bot_language)
-        unavailable_message = localized_text("function_unavailable_in_inline_mode", self.bot_language)
+        answer_tr = localized_text("answer", lang)
+        loading_tr = localized_text("loading", lang)
+        unavailable_message = localized_text("function_unavailable_in_inline_mode", lang)
         # Edit the current message to indicate that the answer is being processed
         await context.bot.edit_message_text(inline_message_id=inline_message_id,
                                             text=f'{query}\n\n_{answer_tr}:_\n{loading_tr}',
                                             parse_mode=constants.ParseMode.MARKDOWN)
 
         logging.info(f'Generating response for inline query by {name}')
-        response, total_tokens = await self.openai.get_chat_response(chat_id=user_id, query=query)
+        response, total_tokens = await self.openai.get_chat_response(chat_id=user.id, query=query)
 
         if is_direct_result(response):
             cleanup_intermediate_files(response)
@@ -1048,38 +1055,15 @@ class ChatGPTTelegramBot:
 
         return total_tokens
 
-    async def check_allowed_and_within_budget(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
-                                              is_inline=False) -> bool:
-        """
-        Checks if the user is allowed to use the bot and if they are within their budget
-        :param update: Telegram update object
-        :param context: Telegram context object
-        :param is_inline: Boolean flag for inline queries
-        :return: Boolean indicating if the user is allowed to use the bot
-        """
-        name = update.inline_query.from_user.name if is_inline else update.message.from_user.name
-        user_id = update.inline_query.from_user.id if is_inline else update.message.from_user.id
-
-        if not await is_allowed(self.config, update, context, is_inline=is_inline):
-            logging.warning(f'User {name} (id: {user_id}) is not allowed to use the bot')
-            await self.send_disallowed_message(update, context, is_inline)
-            return False
-        if not is_within_budget(self.config, self.usage, update, is_inline=is_inline):
-            logging.warning(f'User {name} (id: {user_id}) reached their usage limit')
-            await self.send_budget_reached_message(update, context, is_inline)
-            return False
-
-        return True
-
     async def _send_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
                             msg: str | None = None, is_inline: bool = False,
                             parse_mode: constants.ParseMode = None) -> None:
         """
         Sends message to the user.
         """
+        user = update.effective_user
         if msg is None:
-            # msg = f"⛔ Вам запрещено использовать данного бота"
-            msg = self.disallowed_message
+            msg = localized_text('messages.disallowed', user.language_code)
 
         if not is_inline:
             await update.effective_message.reply_text(
@@ -1091,33 +1075,6 @@ class ChatGPTTelegramBot:
         else:
             result_id = str(uuid4())
             await self.send_inline_query_result(update, result_id, message_content=msg)
-
-    async def send_disallowed_message(self, update: Update, _: ContextTypes.DEFAULT_TYPE, is_inline=False):
-        """
-        Sends the disallowed message to the user.
-        """
-        if not is_inline:
-            await update.effective_message.reply_text(
-                message_thread_id=get_thread_id(update),
-                text=self.disallowed_message,
-                disable_web_page_preview=True
-            )
-        else:
-            result_id = str(uuid4())
-            await self.send_inline_query_result(update, result_id, message_content=self.disallowed_message)
-
-    async def send_budget_reached_message(self, update: Update, _: ContextTypes.DEFAULT_TYPE, is_inline=False):
-        """
-        Sends the budget reached message to the user.
-        """
-        if not is_inline:
-            await update.effective_message.reply_text(
-                message_thread_id=get_thread_id(update),
-                text=self.budget_limit_message
-            )
-        else:
-            result_id = str(uuid4())
-            await self.send_inline_query_result(update, result_id, message_content=self.budget_limit_message)
 
     @moder_restricted
     async def moder_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
@@ -1213,8 +1170,15 @@ class ChatGPTTelegramBot:
         """
         Post initialization hook for the bot.
         """
-        await application.bot.set_my_commands(self.group_commands, scope=BotCommandScopeAllGroupChats())
-        await application.bot.set_my_commands(self.commands)
+        await application.bot.set_my_commands([
+            BotCommand(command=c.command, description=localized_text(c.description, self.bot_language))
+            for c in self.group_commands],
+            scope=BotCommandScopeAllGroupChats()
+        )
+        await application.bot.set_my_commands([
+            BotCommand(command=c.command, description=localized_text(c.description, self.bot_language))
+            for c in self.commands
+        ])
         bot_user = await application.bot.get_me()
         log_str = f"Initializing @{bot_user.username}"
 
@@ -1312,23 +1276,21 @@ class ChatGPTTelegramBot:
         Ask bot moderators fow actions on new users
         """
         user = update.effective_user
+        moder_langs = {moder.id:moder.language_code for moder in context.bot_data['moders']}
         if user not in context.bot_data["waitlist"]:
-            # user_msg = "⚠️Дождитесь разрешения модератора"
-            user_msg = localized_text("wait_for_approve", self.bot_language)
+            user_msg = localized_text("wait_for_approve", user.language_code)
 
             key = str(uuid4())  # Generate ID and separate value from command
             context.bot_data["waitlist"][user] = key  # Store user and key in bot_data
 
             for moder_id in self.moder_ids:
                 try:
+                    lang = moder_langs.get(moder_id, None)
                     msg = await context.bot.send_message(
                         chat_id=moder_id,
-                        reply_markup=await moder_action_keyboard(key, self.bot_language),
+                        reply_markup=await moder_action_keyboard(key, lang),
                         parse_mode=constants.ParseMode.HTML,
-                        # text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
-                        text=f"{localized_text('new_user', self.bot_language)[0]} "
-                             f"{user.mention_html()}! "
-                             f"{localized_text('new_user', self.bot_language)[1]}"
+                        text=localized_text('keyboards.admin_approve.new_user', lang=lang, user=user.mention_html())
                     )
                     context.bot_data["service_msgs"].setdefault(key, {}).setdefault(moder_id, msg)
                 except:
@@ -1340,27 +1302,25 @@ class ChatGPTTelegramBot:
                     if not msg:
                         raise Exception
                     await context.bot.delete_message(moder_id, msg.id)
+                    lang = moder_langs.get(moder_id, None)
                     upd_msg = await context.bot.send_message(
                         chat_id=moder_id,
-                        reply_markup=await moder_action_keyboard(key, self.bot_language),
+                        reply_markup=await moder_action_keyboard(key, lang),
                         parse_mode=constants.ParseMode.HTML,
-                        # text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
-                        text=f"{localized_text('new_user', self.bot_language)[0]} "
-                             f"{user.mention_html()}! "
-                             f"{localized_text('new_user', self.bot_language)[1]}"
+                        text=localized_text('keyboards.admin_approve.new_user', lang=lang, user=user.mention_html())
                     )
                     context.bot_data["service_msgs"].setdefault(key, {}).setdefault(moder_id, upd_msg)
                 except:
                     continue
-            # user_msg = "⚠️Ждем решения модератора..."
-            user_msg = localized_text("waiting_moderator", self.bot_language)
+            user_msg = localized_text("waiting_moderator", user.language_code)
 
         await self._send_message(update, context, msg=user_msg)
         raise ApplicationHandlerStop
 
     @budget_check
     async def check_budget(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        msg = self.budget_limit_message
+        user = update.effective_user
+        msg = localized_text('messages.budget_limit', user.language_code)
 
         if update.message and update.message.text:
             message_text = update.message.text
