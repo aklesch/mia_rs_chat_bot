@@ -867,15 +867,13 @@ class ChatGPTTelegramBot:
 
         return total_tokens
 
-    async def inline_query(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    async def inline_query(self, update: Update, _: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Handle the inline query. This is run when you type: @botusername <query>
         """
         query = update.inline_query.query
         if len(query) < 3:
             return
-        # if not await self.check_allowed_and_within_budget(update, context, is_inline=True):
-        #     return
 
         callback_data_suffix = "gpt:"
         result_id = str(uuid4())
@@ -1055,7 +1053,7 @@ class ChatGPTTelegramBot:
 
         return total_tokens
 
-    async def _send_message(self, update: Update, context: ContextTypes.DEFAULT_TYPE,
+    async def _send_message(self, update: Update, _: ContextTypes.DEFAULT_TYPE,
                             msg: str | None = None, is_inline: bool = False,
                             parse_mode: constants.ParseMode = None) -> None:
         """
@@ -1079,6 +1077,8 @@ class ChatGPTTelegramBot:
     @moder_restricted
     async def moder_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         moder = update.effective_user
+        # moder_langs = {moder.id:moder.language_code for moder in context.bot_data['moders']}
+        moders = {moder.id:moder.to_dict() for moder in context.bot_data['moders']}
         query = update.callback_query
         action = query.data.split()[0]
         key = query.data.split()[-1]
@@ -1087,53 +1087,58 @@ class ChatGPTTelegramBot:
 
         await query.answer()
 
+        if not user:
+            return
+
         # if key is not None and query.message == context.bot_data['service_msgs'][key][moder.id]:
         #     del context.bot_data['service_msgs'][key][moder.id]
 
         action_text = 'ignored'
         match action:
             case "Approve":
-                action_text = 'user_approved'
+                action_text = 'approved'
                 self.user_ids = user
                 context.bot_data['users'].add(user)
+
+                commands_description = [
+                    f'/{c.command} - {localized_text(c.description, user.language_code)}'
+                    for c in self.commands
+                ]
+                user_msg = (
+                        localized_text('messages.approved', user.language_code) + '\n\n' +
+                        localized_text('help_text.title', user.language_code) +
+                        '\n\n' +
+                        '\n'.join(commands_description) +
+                        '\n\n' +
+                        localized_text('help_text.footer', user.language_code)
+                )
+
             case "Deny":
-                action_text = 'user_denied'
+                action_text = 'denied'
                 self.banned_ids = user
                 context.bot_data['banned'].add(user)
-                await context.bot.send_message(
-                    chat_id=user.id,
-                    # text="Админ послал тебя на три буквы, не пиши сюда больше",
-                    text=localized_text("user_was_denied", self.bot_language),
-                    disable_web_page_preview=True
-                )
-            # case "Ban":
-            #     print("Ban Action")
-            #     return
-            # case "Unban":
-            #     print("Unban Action")
-            #     return
-            case _:
-                # print("Default Action")
-                return
 
-        # await query.edit_message_text(
-        #     # text=f"User {user.mention_html()} was {action_text}!",
-        #     text=f"{localized_text('user_status', self.bot_language)[0]}"
-        #          f"{user.mention_html()}"
-        #          f"{localized_text('user_status', self.bot_language)[1]}"
-        #          f"{action_text}",
-        #     reply_markup=None,
-        #     parse_mode="HTML"
-        # )
+                user_msg = localized_text('messages.disallowed', user.language_code)
 
         for moder_id in list(context.bot_data['service_msgs'][key].keys()):
+            moder_lang = moder_langs.get(moder_id, self.bot_language)
+            localized_action = localized_text(f'keyboards.status.{action_text}', moder_lang)
             if moder_id == moder.id:
-                new_text = f"{localized_text('user_status', self.bot_language)[0]} "\
-                           f"{user.mention_html()} "\
-                           f"{localized_text('user_status', self.bot_language)[1]} "\
-                           f"{localized_text(action_text, self.bot_language)}!"
+                moder_msg = localized_text(
+                    'keyboards.moder_approve.user_status',
+                    moder_lang,
+                    user=user.mention_html(),
+                    action=localized_action
+                )
             else:
-                new_text = f"{localized_text('user_status_full', self.bot_language)[0]} "\
+                moder_msg = localized_text(
+                    'keyboards.moder_approve.user_status',
+                    moder_lang,
+                    user=user.mention_html(),
+                    action=localized_action,
+                    moder=moder_id
+                )
+                ______msg = f"{localized_text('user_status_full', self.bot_language)[0]} "\
                            f"{user.mention_html()} "\
                            f"{localized_text('user_status_full', self.bot_language)[1]} "\
                            f"{localized_text(action_text, self.bot_language)} "\
@@ -1143,24 +1148,16 @@ class ChatGPTTelegramBot:
             if msg:
                 await msg.edit_text(
                     # text=f"User {user.mention_html()} was {action_text} by {moder.mention_html()}!",
-                    text=new_text,
+                    text=moder_msg,
                     reply_markup=None,
                     parse_mode="HTML"
                 )
 
-        # for moder_id, msg in context.bot_data['service_msgs'][key].items():
-        #     await msg.edit_text(
-        #         # text=f"User {user.mention_html()} was {action_text} by {moder.mention_html()}!",
-        #         text=f"{localized_text('user_status_full', self.bot_language)[0]}"
-        #              f"{user.mention_html()}"
-        #              f"{localized_text('user_status_full', self.bot_language)[1]}"
-        #              f"{action_text}"
-        #              f"{localized_text('user_status_full', self.bot_language)[2]}"
-        #              f"{moder.mention_html()}",
-        #         reply_markup=None,
-        #         parse_mode="HTML"
-        #     )
-        #     chat_id.remove(msg)
+        await context.bot.send_message(
+            chat_id=user.id,
+            text=user_msg,
+            disable_web_page_preview=True
+        )
 
         logging.info(f"User {user.id} was {localized_text(action_text, 'en')} by moderator {moder.id}")
         del context.bot_data["service_msgs"][key]
@@ -1221,61 +1218,13 @@ class ChatGPTTelegramBot:
         del application.bot_data['service_msgs']
         del application.bot_data['waitlist']
 
-    async def _update(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
-        """Check user"""
-        if not self.chat_id:
-            pass
-
-        if not update.effective_user:
-            raise ApplicationHandlerStop
-
-        user = update.effective_user
-
-        if user.id in self.admin_ids and user not in context.bot_data['admins']:
-            context.bot_data['admins'].add(user)
-            return
-        if user.id in self.moder_ids and user not in context.bot_data['moders']:
-            context.bot_data['moders'].add(user)
-            return
-        if user.id in self.user_ids and user not in context.bot_data['users']:
-            context.bot_data['users'].add(user)
-            return
-        if user.id not in self.all_ids:
-            await update.effective_message.reply_text(
-                message_thread_id=get_thread_id(update),
-                text="Дождитесь разрешения модератора",  # TODO: localize
-                disable_web_page_preview=True
-            )
-            key = str(uuid4())  # Generate ID and separate value from command
-            context.bot_data[key] = user  # Store user in bot_data
-
-            keyboard = [
-                [InlineKeyboardButton("Approve", callback_data=f"Approve {key}")],
-                [InlineKeyboardButton("Deny", callback_data=f"Deny {key}")]
-            ]
-
-            reply_markup = InlineKeyboardMarkup(keyboard)
-
-            for moder in self.moder_ids:
-                try:
-                    mod_msg = await context.bot.send_message(
-                        chat_id=moder,
-                        reply_markup=reply_markup,
-                        parse_mode="HTML",
-                        text=f"Новый пользователь {user.mention_html()}! Что с ним делать?"
-                    )
-                    context.bot_data['mod_msgs'].setdefault(key, {}).setdefault(moder, []).append(mod_msg)
-                except:
-                    continue
-
-            raise ApplicationHandlerStop
-
     @check_permissions
     async def check_user(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         """
         Ask bot moderators fow actions on new users
         """
         user = update.effective_user
+        # TODO: think of 'context.bot_data[service_msgs][key]' dict with moder TelegramObject as a key
         moder_langs = {moder.id:moder.language_code for moder in context.bot_data['moders']}
         if user not in context.bot_data["waitlist"]:
             user_msg = localized_text("wait_for_approve", user.language_code)
@@ -1285,12 +1234,12 @@ class ChatGPTTelegramBot:
 
             for moder_id in self.moder_ids:
                 try:
-                    lang = moder_langs.get(moder_id, None)
+                    lang = moder_langs.get(moder_id, self.bot_language)
                     msg = await context.bot.send_message(
                         chat_id=moder_id,
                         reply_markup=await moder_action_keyboard(key, lang),
                         parse_mode=constants.ParseMode.HTML,
-                        text=localized_text('keyboards.admin_approve.new_user', lang=lang, user=user.mention_html())
+                        text=localized_text('keyboards.moder_approve.new_user', lang=lang, user=user.mention_html())
                     )
                     context.bot_data["service_msgs"].setdefault(key, {}).setdefault(moder_id, msg)
                 except:
@@ -1299,8 +1248,6 @@ class ChatGPTTelegramBot:
             key = context.bot_data["waitlist"][user]
             for moder_id, msg in context.bot_data['service_msgs'][key].items():
                 try:
-                    if not msg:
-                        raise Exception
                     await context.bot.delete_message(moder_id, msg.id)
                     lang = moder_langs.get(moder_id, None)
                     upd_msg = await context.bot.send_message(

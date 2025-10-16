@@ -15,13 +15,13 @@ ru:
   keyboards:
     status:
       approved: одобрен
-      banned: отклонен
-    admin_approve:
+      denied: отклонен
+    moder_approve:
       approve: Разрешить
       deny: Запретить
       new_user: Новый пользователь %{user}! Что с ним делать?
       user_status: Пользователь %{user} был %{action}!
-      user_status_full: Пользователь %{user} был %{action} админом %{admin}!
+      user_status_full: Пользователь %{user} был %{action} модератором %{moder}!
     voice_list:
       send_preview: 🔈 Пример голоса
       generate: ၊၊||၊ Сгенерировать речь
@@ -30,10 +30,10 @@ ru:
   menus:
   messages:
     approved: ✅ Отлично, Вам разрешено использовать данного бота
-    budget_limit: 🫰Извини, ты достиг лимита использования!
-    disallowed: ⛔ Извини, тебе запрещено использовать этого бота
-    must_be_approved: ⚠️Пожалуйста, дождитесь аппрува администратора
-    waiting_admin: ⚠️ Ждем решения администратора...
+    budget_limit: 🫰Извините, Вы достиг лимита использования!
+    disallowed: ⛔ Извините, Вам запрещено использовать этого бота
+    must_be_approved: ⚠️Пожалуйста, дождитесь решения модератора
+    waiting_moderator: ⚠️ Ждем решения модератора...
     must_be_subscribed: 🔔 Чтобы использовать этого телеграм-бота, Вы должны быть подписаны на канал @%{channel_name}
     resend_failed: Нет сообщений для пересылки
     reset_done: Готово!
@@ -42,7 +42,7 @@ ru:
     tts_no_prompt: Пожалуйста, напишите запрос! (e.g. /tts мой дом)
     tts_fail: Не удалось сгенерировать речь
     media_download_fail:
-      error: Не удалось загрузить %{filetype} файл
+      error: Не удалось загрузить %{filetype}
       size: Убедитесь, что размер файла не слишком большой (не более 20 МБ).
     media_type_fail: Неподдерживаемый тип файла
     transcribe_fail: Не удалось расшифровать текст

@@ -15,8 +15,8 @@ en:
   keyboards:
     status:
       approved: approved
-      banned: banned
-    admin_approve:
+      denied: denied
+    moder_approve:
       approve: Approve
       deny: Deny
       new_user: New user %{user}! What to do with him?
@@ -34,8 +34,8 @@ en:
     approved: ✅ Nice, you were approved to use this this bot
     budget_limit: 🫰Sorry, you have reached your usage limit!
     disallowed: ⛔ Sorry, you are not allowed to use this bot
-    must_be_approved: ⚠️ Please wait for admin approve
-    waiting_admin: ⚠️ Still waiting for the admin's decision...
+    must_be_approved: ⚠️ Please wait for moderator approve
+    waiting_moderator: ⚠️ Still waiting for the moderator decision...
     must_be_subscribed: 🔔 To use this Telegram bot, you need to subscribe to the @%{channel_name} channel
     resend_failed: You have nothing to resend
     reset_done: Done!
