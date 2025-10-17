@@ -5,8 +5,6 @@ from telegram.ext import ApplicationHandlerStop
 from usage_tracker import UsageTracker
 from utils import (
     get_thread_id,
-    is_group_chat,
-    is_user_in_group,
     get_rem
 )
 

@@ -72,9 +72,9 @@ en:
     total: 💰 for a total amount of $%{cost}
     budget: "*remaining budget %{period} - $%{left}*"
   show_usage:
-    stats_tokens: tokens
-    prompt: prompt
-    completion: completion
+    stats_tokens: 💰 %{tokens} tokens
+    prompt: %{prompt} prompt
+    completion: %{completion} completion
   loading: Loading...
   usage_today: Usage today
   stats_conversation:

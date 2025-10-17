@@ -70,7 +70,7 @@ ru:
     total: 💰 на общую сумму $%{cost}
     budget: "*остаточный бюджет %{period} - $%{left}*"
   show_usage:
-    stats_tokens: tokens
+    stats_tokens: 💰 %{tokens} токенов
     prompt: prompt
     completion: completion
   loading: Загрузка...

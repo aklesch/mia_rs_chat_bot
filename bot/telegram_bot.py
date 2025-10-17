@@ -514,7 +514,7 @@ class ChatGPTTelegramBot:
                 transcript_output = f"_{localized_text('transcript', lang)}:_\n\"{transcript}\""
             else:
                 # Get the response of the transcript
-                response, total_tokens = await self.openai.get_chat_response(chat_id=chat_id, query=transcript)
+                response, total_tokens = await self.openai.get_chat_response(chat_id=chat_id, query=transcript, lang=lang)
                 transcript_output = (
                     f"_{localized_text('transcript', lang)}:_\n\"{transcript}\"\n\n"
                     f"_{localized_text('answer', lang)}:_\n{response}"
