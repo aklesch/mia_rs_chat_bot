@@ -318,25 +318,6 @@ def is_within_budget(config, usage, update: Update, is_inline=False) -> bool:
     return remaining_budget > 0
 
 
-def add_chat_request_to_usage_tracker(usage, config, user_id, used_tokens):
-    """
-    Add chat request to usage tracker
-    :param usage: The usage tracker object
-    :param config: The bot configuration object
-    :param user_id: The user id
-    :param used_tokens: The number of tokens used
-    """
-    try:
-        if int(used_tokens) == 0:
-            logging.warning('No tokens used. Not adding chat request to usage tracker.')
-            return
-        # add chat request to users usage tracker
-        usage[user_id].add_chat_tokens(used_tokens, config['token_price'])
-    except Exception as e:
-        logging.warning(f'Failed to add tokens to usage_logs: {str(e)}')
-        pass
-
-
 def get_reply_to_message_id(config, update: Update):
     """
     Returns the message id of the message to reply to

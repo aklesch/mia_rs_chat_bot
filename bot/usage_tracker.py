@@ -4,11 +4,6 @@ import json
 from datetime import date
 
 
-def year_month(date_str):
-    # extract string of year-month from date, eg: '2023-03'
-    return str(date_str)[:7]
-
-
 class UsageTracker:
     """
     UsageTracker class
@@ -70,7 +65,7 @@ class UsageTracker:
                 "usage_history": {"chat_tokens": {}, "transcription_seconds": {}, "number_images": {}, "tts_characters": {}, "vision_tokens":{}}
             }
 
-    def write_to_file(self):
+    def write_to_file(self) -> None:
         """
         Writes usage data to user log file
         """
@@ -84,32 +79,27 @@ class UsageTracker:
         :param tokens_price: price per 1000 tokens, defaults to 0.002
         """
         today = str(date.today())
-        token_cost = round(float(tokens) * tokens_price / 1000, 6)
-        self.add_current_costs(token_cost)
-
+        chat_cost = round(float(tokens) * tokens_price / 1000, 6)
+        self.add_current_costs(chat_cost)
         usage = self.usage["usage_history"]["chat_tokens"]
-
-        # update or create usage_history
-        usage[today] = usage.get(today, 0) + tokens
+        usage[today] = usage.get(today, 0) + float(tokens)
         self.write_to_file()
 
-    def get_current_token_usage(self):
-        """Get token amounts used for today and this month
+    def get_chat_tokens(self) -> tuple[float, float]:
+        """Returns the amount of tokens used today and this month
         :return: total number of tokens used per day and per month
         """
         today = str(date.today())
-        if today in self.usage["usage_history"]["chat_tokens"]:
-            usage_day = self.usage["usage_history"]["chat_tokens"][today]
-        else:
-            usage_day = 0
-        usage_month = 0
-        for day, tokens in self.usage["usage_history"]["chat_tokens"].items():
+        usage = self.usage["usage_history"]["chat_tokens"]
+        tokens_today = usage.get(today, 0)
+        tokens_this_month = 0
+        for day, tokens in usage.items():
             if day.startswith(today[:7]):
-                usage_month += tokens
-        return usage_day, usage_month
+                tokens_this_month += tokens
 
-    # image usage functions:
-    def add_image_request(self, image_size, image_prices="0.016,0.018,0.02"):
+        return tokens_today, tokens_this_month
+
+    def add_image_request(self, image_size, image_prices="0.016,0.018,0.02") -> None:
         """Add image request to users usage history and update current costs.
         :param image_size: requested image size
         :param image_prices: prices for images of sizes ["256x256", "512x512", "1024x1024"],
@@ -117,134 +107,100 @@ class UsageTracker:
         """
         sizes = ["256x256", "512x512", "1024x1024"]
         requested_size = sizes.index(image_size)
-        image_cost = image_prices[requested_size]
+        image_cost = float(image_prices.split(',')[requested_size])
         today = str(date.today())
         self.add_current_costs(image_cost)
-
         usage = self.usage["usage_history"]["number_images"].setdefault(today, [0, 0, 0])
-
-        # update usage_history
         usage[requested_size] += 1
-
         self.write_to_file()
 
-    def get_current_image_count(self):
+    def get_images_count(self) -> tuple[list[int], list[int]]:
         """Get number of images requested for today and this month.
-
         :return: total number of images requested per day and per month
         """
-        today = date.today()
-        if str(today) in self.usage["usage_history"]["number_images"]:
-            usage_day = sum(self.usage["usage_history"]["number_images"][str(today)])
-        else:
-            usage_day = 0
-        month = str(today)[:7]  # year-month as string
-        usage_month = 0
-        for today, images in self.usage["usage_history"]["number_images"].items():
-            if today.startswith(month):
-                usage_month += sum(images)
-        return usage_day, usage_month
+        today = str(date.today())
+        usage = self.usage["usage_history"]["number_images"]
+        images_today = usage.get(today, [0, 0, 0])
+        images_this_month = [0, 0, 0]
+        for day, images in usage.items():
+            if day.startswith(today[:7]):
+                images_this_month = [sum(x) for x in zip(images_this_month, images)]
+
+        return images_today, images_this_month
 
     # vision usage functions
-    def add_vision_tokens(self, tokens, vision_token_price=0.01):
+    def add_vision_tokens(self, tokens, vision_token_price=0.01) -> None:
         """
          Adds requested vision tokens to a users usage history and updates current cost.
         :param tokens: total tokens used in last request
         :param vision_token_price: price per 1K tokens transcription, defaults to 0.01
         """
         today = str(date.today())
-        token_cost = round(tokens * vision_token_price / 1000, 6)
-        self.add_current_costs(token_cost)
-
+        vision_cost = round(float(tokens) * vision_token_price / 1000, 6)
+        self.add_current_costs(vision_cost)
         usage = self.usage["usage_history"]["vision_tokens"]
-
-        # update usage_history
-        usage[today] = usage.get(today, 0) + tokens
-        # write updated token usage to user file
+        usage[today] = usage.get(today, 0) + float(tokens)
         self.write_to_file()
 
-    def get_current_vision_tokens(self):
+    def get_vision_tokens(self) -> tuple[float, float]:
         """Get vision tokens for today and this month.
-
         :return: total amount of vision tokens per day and per month
         """
-        today = date.today()
-        if str(today) in self.usage["usage_history"]["vision_tokens"]:
-            tokens_day = self.usage["usage_history"]["vision_tokens"][str(today)]
-        else:
-            tokens_day = 0
-        month = str(today)[:7]  # year-month as string
-        tokens_month = 0
-        for today, tokens in self.usage["usage_history"]["vision_tokens"].items():
-            if today.startswith(month):
-                tokens_month += tokens
-        return tokens_day, tokens_month
+        today = str(date.today())
+        usage = self.usage["usage_history"]["vision_tokens"]
+        vision_tokens_today = usage.get(today, 0)
+        vision_tokens_this_month = 0
+        for day, tokens in usage.items():
+            if day.startswith(today[:7]):
+                vision_tokens_this_month += tokens
 
-    # tts usage functions:
-    def add_tts_request(self, text_length, tts_model, tts_prices):
+        return vision_tokens_today, vision_tokens_this_month
+
+    def add_tts_chars(self, text_length, tts_model, tts_prices="0.015,0.030") -> None:
         """Add tts request to users usage history and update current costs.
         :param text_length: length of text to generate speach from
         :param tts_model: tts model to generate speach with,
-        :param tts_prices: prices for tts models, defaults to [0.016, 0.018, 0.02]
+        :param tts_prices: prices for tts models, defaults to [0.015, 0.030]
         """
         tts_models = ['tts-1', 'tts-1-hd']
         requested_tts_model = tts_models.index(tts_model)
-        price = tts_prices[requested_tts_model]
+        price = float(tts_prices.split(',')[requested_tts_model])
         today = str(date.today())
-        tts_price = round(text_length * price / 1000, 6)
-        self.add_current_costs(tts_price)
-
+        tts_cost = round(float(text_length) * price / 1000, 6)
+        self.add_current_costs(tts_cost)
         usage = self.usage['usage_history']['tts_characters'].setdefault(tts_model, {})
-
-        # update usage_history
-        usage[today] = usage.get(today, 0) + text_length
-
+        usage[today] = usage.get(today, 0) + float(text_length)
         self.write_to_file()
 
-    def get_current_tts_usage(self):
+    def get_tts_chars(self) -> tuple[int, int]:
         """Get length of speech generated for today and this month.
-
         :return: total amount of characters converted to speech per day and per month
         """
-
-        tts_models = ['tts-1', 'tts-1-hd']
         today = date.today()
-        characters_day = 0
-        for tts_model in tts_models:
-            if tts_model in self.usage["usage_history"]["tts_characters"] and \
-                str(today) in self.usage["usage_history"]["tts_characters"][tts_model]:
-                characters_day += self.usage["usage_history"]["tts_characters"][tts_model][str(today)]
+        usage = self.usage['usage_history']['tts_characters']
+        chars_today = 0
+        for model in usage:
+            chars_today += usage.get(model, {}).get(today, 0)
 
-        month = str(today)[:7]  # year-month as string
-        characters_month = 0
-        for tts_model in tts_models:
-            if tts_model in self.usage["usage_history"]["tts_characters"]: 
-                for today, characters in self.usage["usage_history"]["tts_characters"][tts_model].items():
-                    if today.startswith(month):
-                        characters_month += characters
-        return int(characters_day), int(characters_month)
+        chars_this_month = 0
+        for model in usage:
+            for day, chars in usage.get(model, {}).items():
+                if day.startswith(today[:7]):
+                    chars_this_month += chars
 
-    # transcription usage functions:
-    def add_transcription_seconds(self, seconds, minute_price=0.006):
-        """Adds requested transcription seconds to a users usage history and updates current cost.
-        :param seconds: total seconds used in last request
-        :param minute_price: price per minute transcription, defaults to 0.006
-        """
-        today = date.today()
-        transcription_price = round(seconds * minute_price / 60, 2)
-        self.add_current_costs(transcription_price)
-
-        # update usage_history
-        if str(today) in self.usage["usage_history"]["transcription_seconds"]:
-            # add requested seconds to existing date
-            self.usage["usage_history"]["transcription_seconds"][str(today)] += seconds
-        else:
-            # create new entry for current date
-            self.usage["usage_history"]["transcription_seconds"][str(today)] = seconds
-
-        # write updated token usage to user file
-        with open(self.user_file, "w") as outfile:
-            json.dump(self.usage, outfile)
+        # for tts_model in tts_models:
+        #     if tts_model in self.usage["usage_history"]["tts_characters"] and \
+        #         str(today) in self.usage["usage_history"]["tts_characters"][tts_model]:
+        #         characters_day += self.usage["usage_history"]["tts_characters"][tts_model][str(today)]
+        #
+        # month = str(today)[:7]  # year-month as string
+        # characters_month = 0
+        # for tts_model in tts_models:
+        #     if tts_model in self.usage["usage_history"]["tts_characters"]:
+        #         for today, characters in self.usage["usage_history"]["tts_characters"][tts_model].items():
+        #             if today.startswith(month):
+        #                 characters_month += characters
+        return int(chars_today), int(chars_this_month)
 
     def add_stt_seconds(self, seconds, minute_price=0.006):
         """Adds requested transcription (stt) seconds to a users usage history and updates current cost.
@@ -254,56 +210,11 @@ class UsageTracker:
         today = str(date.today())
         stt_cost = round(seconds * minute_price / 60, 6)
         self.add_current_costs(stt_cost)
-
         usage = self.usage['usage_history']["transcription_seconds"]
-
-        # update usage_history
         usage[today] = usage.get(today, 0) + seconds
-
         self.write_to_file()
 
-    def add_current_costs(self, request_cost):
-        """
-        Add current cost to all_time, day and month cost and update last_update date.
-        """
-        today = date.today()
-        last_update = date.fromisoformat(self.usage["current_cost"]["last_update"])
-
-        # add to all_time cost, initialize with calculation of total_cost if key doesn't exist
-        self.usage["current_cost"]["all_time"] = \
-            self.usage["current_cost"].get("all_time", self.initialize_all_time_cost()) + request_cost
-        # add current cost, update new day
-        if today == last_update:
-            self.usage["current_cost"]["day"] += request_cost
-            self.usage["current_cost"]["month"] += request_cost
-        else:
-            if today.month == last_update.month:
-                self.usage["current_cost"]["month"] += request_cost
-            else:
-                self.usage["current_cost"]["month"] = request_cost
-            self.usage["current_cost"]["day"] = request_cost
-            self.usage["current_cost"]["last_update"] = str(today)
-
-    def get_current_transcription_duration(self):
-        """Get minutes and seconds of audio transcribed for today and this month.
-
-        :return: total amount of time transcribed per day and per month (4 values)
-        """
-        today = date.today()
-        if str(today) in self.usage["usage_history"]["transcription_seconds"]:
-            seconds_day = self.usage["usage_history"]["transcription_seconds"][str(today)]
-        else:
-            seconds_day = 0
-        month = str(today)[:7]  # year-month as string
-        seconds_month = 0
-        for today, seconds in self.usage["usage_history"]["transcription_seconds"].items():
-            if today.startswith(month):
-                seconds_month += seconds
-        minutes_day, seconds_day = divmod(seconds_day, 60)
-        minutes_month, seconds_month = divmod(seconds_month, 60)
-        return int(minutes_day), round(seconds_day, 2), int(minutes_month), round(seconds_month, 2)
-
-    def get_current_stt_duration(self) -> tuple[str, str]:
+    def get_stt_duration(self) -> tuple[str, str]:
         """Get minutes and seconds of audio transcribed for today and this month.
         :return: total amount of time transcribed per day and per month (2 values)
         """
@@ -328,30 +239,47 @@ class UsageTracker:
 
         return hh_mm_ss(seconds_day), hh_mm_ss(seconds_month)
 
-    # general functions
-    def get_current_cost(self):
-        """Get total USD amount of all requests of the current day and month
+    def add_current_costs(self, request_cost) -> None:
+        """
+        Add current cost to all_time, day and month cost and update last_update date.
+        """
+        today = str(date.today())
+        last_update = self.usage["current_cost"]["last_update"]
+        usage = self.usage["current_cost"]
 
+        if today == last_update:
+            usage["day"] += request_cost
+            usage["month"] += request_cost
+        elif today.startswith(last_update[:7]):
+            usage["day"] = request_cost
+            usage["month"] += request_cost
+        else:
+            usage["day"] = request_cost
+            usage["month"] = request_cost
+
+        usage["all_time"] = usage.get("all_time", 0) + request_cost
+        usage["last_update"] = today
+
+    def get_current_cost(self) -> dict[str, float]:
+        """Get total USD amount of all requests of the current day and month
         :return: cost of current day and month
         """
-        today = date.today()
-        last_update = date.fromisoformat(self.usage["current_cost"]["last_update"])
+        today = str(date.today())
+        usage = self.usage["current_cost"]
+        last_update = usage["last_update"]
+        cost_day = 0.0
+        cost_month = 0.0
         if today == last_update:
-            cost_day = self.usage["current_cost"]["day"]
-            cost_month = self.usage["current_cost"]["month"]
-        else:
-            cost_day = 0.0
-            if today.month == last_update.month:
-                cost_month = self.usage["current_cost"]["month"]
-            else:
-                cost_month = 0.0
-        # add to all_time cost, initialize with calculation of total_cost if key doesn't exist
-        cost_all_time = self.usage["current_cost"].get("all_time", self.initialize_all_time_cost())
+            cost_day = usage["day"]
+            cost_month = usage["month"]
+        elif today.startswith(last_update[:7]):
+            cost_month = usage["month"]
+
+        cost_all_time = usage.get("all_time", 0.0)
         return {"cost_today": cost_day, "cost_month": cost_month, "cost_all_time": cost_all_time}
 
-    def initialize_all_time_cost(self, tokens_price=0.002, image_prices="0.016,0.018,0.02", minute_price=0.006, vision_token_price=0.01, tts_prices='0.015,0.030'):
+    def get_all_time_cost(self, tokens_price=0.002, image_prices="0.016,0.018,0.02", minute_price=0.006, vision_token_price=0.01, tts_prices="0.015,0.030") -> float:
         """Get total USD amount of all requests in history
-        
         :param tokens_price: price per 1000 tokens, defaults to 0.002
         :param image_prices: prices for images of sizes ["256x256", "512x512", "1024x1024"],
             defaults to [0.016, 0.018, 0.02]
@@ -360,22 +288,23 @@ class UsageTracker:
         :param tts_prices: price per 1K characters tts per model ['tts-1', 'tts-1-hd'], defaults to [0.015, 0.030]
         :return: total cost of all requests
         """
-        total_tokens = sum(self.usage['usage_history']['chat_tokens'].values())
-        token_cost = round(total_tokens * tokens_price / 1000, 6)
+        usage = self.usage['usage_history']
+        chat_tokens = sum(usage['chat_tokens'].values())
+        token_cost = round(chat_tokens * tokens_price / 1000, 6)
 
-        total_images = [sum(values) for values in zip(*self.usage['usage_history']['number_images'].values())]
-        image_prices_list = [float(x) for x in image_prices.split(',')]
-        image_cost = sum([count * price for count, price in zip(total_images, image_prices_list)])
+        images = [sum(values) for values in zip(*usage['number_images'].values())]
+        image_prices = [float(x) for x in image_prices.split(',')]
+        images_cost = round(sum([count * price for count, price in zip(images, image_prices)]), 6)
 
-        total_transcription_seconds = sum(self.usage['usage_history']['transcription_seconds'].values())
-        transcription_cost = round(total_transcription_seconds * minute_price / 60, 2)
+        stt_seconds = sum(usage['transcription_seconds'].values())
+        stt_cost = round(stt_seconds * minute_price / 60, 6)
 
-        total_vision_tokens = sum(self.usage['usage_history']['vision_tokens'].values())
-        vision_cost = round(total_vision_tokens * vision_token_price / 1000, 2)
+        vision_tokens = sum(usage['vision_tokens'].values())
+        vision_cost = round(vision_tokens * vision_token_price / 1000, 6)
 
-        total_characters = [sum(tts_model.values()) for tts_model in self.usage['usage_history']['tts_characters'].values()]
-        tts_prices_list = [float(x) for x in tts_prices.split(',')]
-        tts_cost = round(sum([count * price / 1000 for count, price in zip(total_characters, tts_prices_list)]), 2)
+        tts_chars = [sum(tts_model.values()) for tts_model in usage['tts_characters'].values()]
+        tts_prices = [float(x) for x in tts_prices.split(',')]
+        tts_cost = round(sum([count * price / 1000 for count, price in zip(tts_chars, tts_prices)]), 6)
 
-        all_time_cost = token_cost + transcription_cost + image_cost + vision_cost + tts_cost
+        all_time_cost = token_cost + stt_cost + images_cost + vision_cost + tts_cost
         return all_time_cost

@@ -41,9 +41,7 @@ from telegram.ext import (
     PicklePersistence,
     TypeHandler,
 )
-from usage_tracker import UsageTracker
 from utils import (
-    add_chat_request_to_usage_tracker,
     cleanup_intermediate_files,
     delete_stt_files,
     edit_message_with_retry,
@@ -54,9 +52,7 @@ from utils import (
     get_thread_id,
     handle_direct_result,
     is_group_chat,
-    is_allowed,
     is_direct_result,
-    is_within_budget,
     message_text,
     split_into_chunks,
 )
@@ -65,7 +61,7 @@ from uuid import uuid4
 uuid_pattern = "[0-9A-Fa-f]{8}(-[0-9A-Fa-f]{4}){3}-[0-9A-Fa-f]{12}"
 audio_preview_dir = 'bot/previews'
 VOICES = [os.path.splitext(filename)[0] for filename in os.listdir(audio_preview_dir)]
-MODER_ACTIONS = ["Approve", "Deny", "Ban", "Unban"]
+MODER_ACTIONS = ["Approve", "Deny"]
 moder_action_pattern = f"^({'|'.join(MODER_ACTIONS)}) ({uuid_pattern}|[0-9]+)$"
 
 
@@ -73,7 +69,6 @@ class ChatGPTTelegramBot:
     """
     Class representing a ChatGPT Telegram Bot.
     """
-
     def __init__(self, config: dict, openai: OpenAIHelper):
         """
         Initializes the bot with the given configuration and GPT bot object.
@@ -258,11 +253,11 @@ class ChatGPTTelegramBot:
 
         chat_messages, chat_token_length = self.openai.get_conversation_stats(chat_id)
 
-        tokens_today, tokens_month = self.usage[user.id].get_current_token_usage()
-        images_today, images_month = self.usage[user.id].get_current_image_count()
-        vision_today, vision_month = self.usage[user.id].get_current_vision_tokens()
-        chars_today, chars_month = self.usage[user.id].get_current_tts_usage()
-        stt_duration_today, stt_duration_month = self.usage[user.id].get_current_stt_duration()
+        tokens_today, tokens_month = self.usage[user.id].get_chat_tokens()
+        images_today, images_month = self.usage[user.id].get_images()
+        vision_today, vision_month = self.usage[user.id].get_vision_tokens()
+        chars_today, chars_month = self.usage[user.id].get_tts_chars()
+        stt_duration_today, stt_duration_month = self.usage[user.id].get_stt_duration()
 
         current_cost = self.usage[user.id].get_current_cost()
 
@@ -392,7 +387,6 @@ class ChatGPTTelegramBot:
                 raise Exception(
                     f"env variable IMAGE_RECEIVE_MODE has invalid value {self.config['image_receive_mode']}")
 
-            # add image request to users usage tracker
             self.usage[user.id].add_image_request(image_size, self.config['image_prices'])
 
         except Exception as e:
@@ -441,8 +435,8 @@ class ChatGPTTelegramBot:
             )
             speech_file.close()
 
-            # add image request to users usage tracker
-            self.usage[user.id].add_tts_request(text_length, self.config['tts_model'], self.config['tts_prices'])
+            # add tts chars to users usage tracker
+            self.usage[user.id].add_tts_chars(text_length, self.config['tts_model'], self.config['tts_prices'])
 
         except Exception as e:
             logging.exception(e)
@@ -940,7 +934,7 @@ class ChatGPTTelegramBot:
                                                   is_inline=True)
                     return
 
-                unavailable_message = localized_text("function_unavailable_in_inline_mode", self.bot_language)
+                unavailable_message = localized_text("function_unavailable_in_inline_mode", lang)
                 if self.config['stream']:
                     stream_response = self.openai.get_chat_response_stream(chat_id=user.id, query=query)
                     i = 0
@@ -1078,7 +1072,7 @@ class ChatGPTTelegramBot:
     async def moder_actions(self, update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
         moder = update.effective_user
         # moder_langs = {moder.id:moder.language_code for moder in context.bot_data['moders']}
-        moders = {moder.id:moder.to_dict() for moder in context.bot_data['moders']}
+        moders = {moder.id: moder.to_dict() for moder in context.bot_data['moders']}
         query = update.callback_query
         action = query.data.split()[0]
         key = query.data.split()[-1]
@@ -1121,37 +1115,32 @@ class ChatGPTTelegramBot:
                 user_msg = localized_text('messages.disallowed', user.language_code)
 
         for moder_id in list(context.bot_data['service_msgs'][key].keys()):
-            moder_lang = moder_langs.get(moder_id, self.bot_language)
-            localized_action = localized_text(f'keyboards.status.{action_text}', moder_lang)
-            if moder_id == moder.id:
-                moder_msg = localized_text(
-                    'keyboards.moder_approve.user_status',
-                    moder_lang,
-                    user=user.mention_html(),
-                    action=localized_action
-                )
-            else:
-                moder_msg = localized_text(
-                    'keyboards.moder_approve.user_status',
-                    moder_lang,
-                    user=user.mention_html(),
-                    action=localized_action,
-                    moder=moder_id
-                )
-                ______msg = f"{localized_text('user_status_full', self.bot_language)[0]} "\
-                           f"{user.mention_html()} "\
-                           f"{localized_text('user_status_full', self.bot_language)[1]} "\
-                           f"{localized_text(action_text, self.bot_language)} "\
-                           f"{localized_text('user_status_full', self.bot_language)[2]} "\
-                           f"{moder.mention_html()}!"
             msg = context.bot_data['service_msgs'][key].pop(moder_id, None)
             if msg:
+                lang = moders.get(moder_id, {}).get('language_code', self.bot_language)
+                localized_action = localized_text(f'keyboards.status.{action_text}', lang)
+                if moder_id == moder.id:
+                    moder_msg = localized_text(
+                        'keyboards.moder_approve.user_status',
+                        lang,
+                        user=user.mention_html(),
+                        action=localized_action
+                    )
+                else:
+                    moder_msg = localized_text(
+                        'keyboards.moder_approve.user_status_full',
+                        lang,
+                        user=user.mention_html(),
+                        action=localized_action,
+                        moder=moder_id
+                    )
                 await msg.edit_text(
-                    # text=f"User {user.mention_html()} was {action_text} by {moder.mention_html()}!",
                     text=moder_msg,
                     reply_markup=None,
                     parse_mode="HTML"
                 )
+            else:
+                continue
 
         await context.bot.send_message(
             chat_id=user.id,
@@ -1225,7 +1214,8 @@ class ChatGPTTelegramBot:
         """
         user = update.effective_user
         # TODO: think of 'context.bot_data[service_msgs][key]' dict with moder TelegramObject as a key
-        moder_langs = {moder.id:moder.language_code for moder in context.bot_data['moders']}
+        # moder_langs = {moder.id:moder.language_code for moder in context.bot_data['moders']}
+        moders = {moder.id: moder.to_dict() for moder in context.bot_data['moders']}
         if user not in context.bot_data["waitlist"]:
             user_msg = localized_text("wait_for_approve", user.language_code)
 
@@ -1234,7 +1224,7 @@ class ChatGPTTelegramBot:
 
             for moder_id in self.moder_ids:
                 try:
-                    lang = moder_langs.get(moder_id, self.bot_language)
+                    lang = moders.get(moder_id, {}).get('language_code', self.bot_language)
                     msg = await context.bot.send_message(
                         chat_id=moder_id,
                         reply_markup=await moder_action_keyboard(key, lang),
@@ -1249,7 +1239,7 @@ class ChatGPTTelegramBot:
             for moder_id, msg in context.bot_data['service_msgs'][key].items():
                 try:
                     await context.bot.delete_message(moder_id, msg.id)
-                    lang = moder_langs.get(moder_id, None)
+                    lang = moders.get(moder_id, {}).get('language_code', self.bot_language)
                     upd_msg = await context.bot.send_message(
                         chat_id=moder_id,
                         reply_markup=await moder_action_keyboard(key, lang),
