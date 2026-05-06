@@ -85,8 +85,13 @@ check_utils() {
   if ! command -v semver &> /dev/null; then
     if [[ $OSTYPE == darwin* ]]; then
       echo -e "installing semver"
-      wget -O /usr/local/bin/semver https://raw.githubusercontent.com/fsaintjacques/semver-tool/master/src/semver &> /dev/null
-      chmod +x /usr/local/bin/semver
+      if [[ $(arch) == 'arm64' ]]; then
+        bin_dir="/opt/homebrew/bin"
+      else
+        bin_dir="/usr/local/bin"
+      fi
+      wget -O ${bin_dir}/semver https://raw.githubusercontent.com/fsaintjacques/semver-tool/master/src/semver &> /dev/null
+      chmod +x ${bin_dir}/semver
       semver --version
     else
       echo -e "semver needed. It can be found at https://github.com/fsaintjacques/semver-tool"
